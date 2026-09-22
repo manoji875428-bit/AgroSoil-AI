@@ -1,0 +1,28 @@
+N,P,K,pH,Organic_Carbon,Region,Crop,Soil_Type,Moisture,Temperature,Rainfall,Fertility,NPK_Total
+42.0,28.0,35.0,6.4,1.8,North,Maize,Loam,24.1,24.8,680,Medium,105.0
+68.0,42.0,58.0,6.8,2.7,North,Wheat,Clay Loam,28.4,21.2,590,High,168.0
+18.0,12.0,20.0,5.7,0.9,North,Millet,Sandy Loam,16.8,26.1,420,Low,50.0
+55.0,30.5,47.0,6.2,2.1,East,Rice,Clay,35.2,27.4,1040,Medium,132.5
+73.0,51.0,66.0,7.1,3.2,East,Sugarcane,Clay Loam,38.5,28.1,1170,High,190.0
+24.0,19.0,28.0,5.9,1.1,East,Groundnut,Sandy Loam,18.7,29.0,510,Low,71.0
+47.0,33.0,39.0,6.5,1.9,South,Cotton,Loam,22.6,27.8,740,Medium,119.0
+82.0,58.0,72.0,7.3,3.8,South,Banana,Clay,41.3,26.4,1250,High,212.0
+13.0,9.0,17.0,5.4,0.7,South,Pulses,Sandy,14.5,30.2,390,Low,39.0
+61.0,37.0,54.0,6.7,2.4,West,Soybean,Loam,26.9,23.3,710,High,152.0
+36.0,24.0,31.0,6.1,1.4,West,Barley,Sandy Loam,19.8,20.7,470,Medium,91.0
+29.0,17.0,25.0,5.8,1.0,West,Chickpea,Sandy,17.2,22.4,450,Low,71.0
+50.0,31.0,44.0,6.3,2.0,North,Maize,Loam,23.2,25.0,660,Medium,125.0
+67.0,46.0,61.0,6.9,2.9,East,Wheat,Clay Loam,30.1,22.1,620,High,174.0
+21.0,15.0,22.0,5.6,0.8,South,Millet,Sandy Loam,15.9,28.8,400,Low,58.0
+58.0,35.0,49.0,6.6,2.3,West,Cotton,Loam,25.4,24.0,735,Medium,142.0
+76.0,54.0,69.0,7.0,3.5,North,Rice,Clay,34.7,26.8,980,High,199.0
+44.0,29.0,37.0,6.0,1.6,East,Groundnut,Loam,21.5,28.2,560,Medium,110.0
+9.0,7.0,14.0,5.2,0.5,South,Pulses,Sandy,12.8,31.0,360,Low,30.0
+64.0,41.0,57.0,6.8,2.6,West,Soybean,Clay Loam,27.6,23.8,705,High,162.0
+52.0,34.0,46.0,6.4,2.0,North,Barley,Loam,22.4,20.9,525,Medium,132.0
+31.0,21.0,29.0,5.9,1.2,East,Chickpea,Sandy Loam,18.4,24.7,480,Low,81.0
+70.0,48.0,63.0,7.2,3.1,South,Banana,Clay,39.2,27.1,1190,High,181.0
+48.5,26.0,34.0,6.2,1.7,West,Maize,Loam,20.1,25.6,650,Low,108.5
+45.0,30.0,41.0,6.35,1.9,North,Wheat,Loam,23.1,22.8,610,Medium,116.0
+54.0,36.0,48.0,6.5,1.9,East,Rice,Clay,33.6,27.9,1010,Medium,138.0
+39.0,25.0,33.0,6.0,1.5,West,Barley,Loam,20.2,21.5,500,Medium,97.0

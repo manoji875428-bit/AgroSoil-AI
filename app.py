@@ -1,6 +1,19 @@
 from __future__ import annotations
 
+from pathlib import Path
+
+import pandas as pd
 import streamlit as st
+
+from modules.analytics import (
+    class_distribution_figure,
+    correlation_figure,
+    nutrient_distribution_figure,
+    regional_summary_figure,
+)
+from modules.data_loader import get_dataset_summary, load_raw_dataset, validate_dataset
+from modules.data_utils import NUMERIC_FEATURES, TARGET_COLUMN, default_processed_path, default_raw_path
+from modules.preprocessing import run_preprocessing
 
 
 st.set_page_config(
@@ -19,6 +32,7 @@ NAVIGATION = {
         ("♧", "Farmer Experience", "farmer-experience"),
     ],
     "INTELLIGENCE": [
+        ("◫", "Data Intelligence", "data-intelligence"),
         ("◈", "Soil Health", "soil-health"),
         ("▦", "Analytics", "analytics"),
         ("⌖", "Regional Insights", "regional-insights"),
@@ -187,6 +201,117 @@ def render_workflow() -> None:
     st.markdown(f'<div class="workflow">{cards}</div>', unsafe_allow_html=True)
 
 
+def render_data_intelligence() -> None:
+    st.markdown('<div class="hero"><div class="hero-grid"><div><div class="eyebrow">◫ DATA INTELLIGENCE · PART 2</div><h1 class="hero-title">See the signal<br><span>before the model.</span></h1><p class="hero-copy">A transparent preprocessing workspace for validating soil data, understanding quality and preparing a clean foundation for future ML training.</p></div><div class="hero-meta"><div class="hero-meta-title">Demo / Synthetic Dataset</div><div class="hero-meta-value">Ready for inspection.</div><div class="hero-meta-copy">This development dataset is synthetic and exists to exercise the pipeline. It does not represent real farm soil.</div></div></div></div>', unsafe_allow_html=True)
+
+    raw_dataframe, load_error = load_raw_dataset(default_raw_path())
+    if load_error or raw_dataframe is None:
+        st.error(load_error or "The current dataset could not be loaded.")
+        return
+
+    validation = validate_dataset(raw_dataframe)
+    if not validation["valid"]:
+        missing_columns = ", ".join(validation["missing_required_columns"])
+        st.error(f"The dataset is missing required soil columns: {missing_columns}")
+        return
+
+    try:
+        processed_dataframe, processing_report = run_preprocessing(raw_dataframe)
+    except (OSError, ValueError, TypeError) as error:
+        st.error(f"The dataset could not be preprocessed safely: {error}")
+        return
+
+    st.markdown('<div class="section">', unsafe_allow_html=True)
+    render_section_header("Dataset overview", "A clean view of what arrived", "Source: soil_demo_synthetic.csv · No ML predictions or recommendations are generated here.")
+    overview_columns = st.columns(4)
+    overview_kpis = [
+        ("TOTAL SAMPLES", str(validation["row_count"]), "Rows in raw source", False),
+        ("TOTAL FEATURES", str(validation["column_count"]), "Columns in raw source", True),
+        ("MISSING VALUES", str(validation["missing_values"]), "Before preprocessing", False),
+        ("DUPLICATE ROWS", str(validation["duplicate_rows"]), "Detected in raw source", False),
+    ]
+    for column, (label, value, note, accent) in zip(overview_columns, overview_kpis):
+        with column:
+            render_kpi_card(label, value, note, accent)
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    st.markdown('<div class="section">', unsafe_allow_html=True)
+    render_section_header("Data quality", "What changed during preparation", "Suspicious values are reported transparently; potential IQR outliers are flagged, not deleted.")
+    quality_columns = st.columns(2)
+    with quality_columns[0]:
+        missing_rows = pd.DataFrame(
+            [(column, count) for column, count in validation["missing_by_column"].items()],
+            columns=["Column", "Missing values"],
+        )
+        if missing_rows.empty:
+            st.success("No missing values were detected in the raw dataset.")
+        else:
+            st.dataframe(missing_rows, use_container_width=True, hide_index=True)
+        st.markdown(f'<div class="kpi-note">Missing values after imputation: <strong>{processing_report["missing_values_after"]}</strong></div>', unsafe_allow_html=True)
+    with quality_columns[1]:
+        quality_rows = []
+        for column, details in validation["numeric_validation"].items():
+            quality_rows.append({"Column": column, "Status": details["status"], "Invalid values": details["invalid_values"]})
+        quality_rows.extend([
+            {"Column": "Duplicates", "Status": "Removed" if processing_report["duplicates_removed"] else "Retained", "Invalid values": processing_report["duplicates_removed"]},
+            {"Column": "Range warnings", "Status": "Flagged for imputation", "Invalid values": sum(processing_report["range_warnings"].values())},
+        ])
+        st.dataframe(pd.DataFrame(quality_rows), use_container_width=True, hide_index=True)
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    st.markdown('<div class="section">', unsafe_allow_html=True)
+    render_section_header("Soil feature statistics", "Know the shape of each signal", "Statistics below use the processed dataset after validation and imputation.")
+    statistics = processed_dataframe[[column for column in NUMERIC_FEATURES if column in processed_dataframe.columns]].describe().T
+    statistics["median"] = processed_dataframe[[column for column in NUMERIC_FEATURES if column in processed_dataframe.columns]].median()
+    statistics = statistics.rename(columns={"mean": "Mean", "median": "Median", "min": "Minimum", "max": "Maximum", "std": "Standard deviation"})
+    statistics = statistics[["Mean", "Median", "Minimum", "Maximum", "Standard deviation"]].round(2)
+    statistics.index = ["Organic Carbon" if column == "Organic_Carbon" else column for column in statistics.index]
+    st.dataframe(statistics, use_container_width=True)
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    st.markdown('<div class="section">', unsafe_allow_html=True)
+    render_section_header("Nutrient distribution", "Read every soil signal", "Interactive distributions reveal spread without implying a prediction.")
+    distribution_columns = st.columns(3)
+    for column, feature in zip(distribution_columns, NUMERIC_FEATURES[:3]):
+        with column:
+            st.plotly_chart(nutrient_distribution_figure(processed_dataframe, feature), use_container_width=True, config={"displayModeBar": False})
+    distribution_columns = st.columns(2)
+    for column, feature in zip(distribution_columns, NUMERIC_FEATURES[3:]):
+        with column:
+            st.plotly_chart(nutrient_distribution_figure(processed_dataframe, feature), use_container_width=True, config={"displayModeBar": False})
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    st.markdown('<div class="section">', unsafe_allow_html=True)
+    render_section_header("Correlation analysis", "See relationships, not conclusions", "Correlation is descriptive only in Part 2 and does not establish causation.")
+    st.plotly_chart(correlation_figure(processed_dataframe, [column for column in NUMERIC_FEATURES if column in processed_dataframe.columns]), use_container_width=True, config={"displayModeBar": False})
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    st.markdown('<div class="section">', unsafe_allow_html=True)
+    render_section_header("Fertility distribution", "Inspect the available target", "Labels are shown only when they exist in the source dataset.")
+    if TARGET_COLUMN in processed_dataframe.columns:
+        st.plotly_chart(class_distribution_figure(processed_dataframe), use_container_width=True, config={"displayModeBar": False})
+    else:
+        st.info("Fertility labels are not available in the current dataset.")
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    st.markdown('<div class="section">', unsafe_allow_html=True)
+    render_section_header("Regional analytics", "Understand sample coverage", "Counts reflect the source file only; no regional statistics are fabricated.")
+    if "Region" in processed_dataframe.columns:
+        st.plotly_chart(regional_summary_figure(processed_dataframe), use_container_width=True, config={"displayModeBar": False})
+    else:
+        st.info("Regional data is not available in the current dataset.")
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    st.markdown('<div class="section">', unsafe_allow_html=True)
+    render_section_header("Processing output", "A reusable ML-ready handoff", "The cleaned file and metadata are generated for Part 3 without training a model.")
+    output_columns = st.columns(2)
+    with output_columns[0]:
+        st.markdown(f'<div class="about-panel"><div class="section-label">Processed dataset</div><div class="placeholder-copy">{Path(default_processed_path()).as_posix()}</div><div class="status-pill">{processing_report["rows_after"]} ROWS · {processing_report["columns_after"]} COLUMNS</div></div>', unsafe_allow_html=True)
+    with output_columns[1]:
+        st.markdown('<div class="about-panel"><div class="section-label">Feature selection</div><div class="placeholder-copy"><strong>Numerical:</strong> ' + ", ".join(processing_report["numeric_features"]) + '<br><strong>Categorical:</strong> ' + ", ".join(processing_report["categorical_features"]) + f'<br><strong>Target:</strong> {processing_report["target"] or "Not available"}</div></div>', unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
+
+
 def render_home() -> None:
     st.markdown('<div class="hero"><div class="hero-grid"><div><div class="eyebrow">🌱 DataXcelerate 2026 · Problem Statement 22</div><h1 class="hero-title">Understand Your Soil.<br><span>Grow Smarter.</span></h1><p class="hero-copy">AI-powered soil intelligence for nutrient analysis, fertility prediction and data-driven agricultural decisions.</p></div><div class="hero-meta"><div class="hero-meta-title">The intelligence layer for modern farms</div><div class="hero-meta-value">From soil signals to smarter action.</div><div class="hero-meta-copy">A single, focused workspace for turning the hidden story beneath every field into an advantage.</div></div></div></div>', unsafe_allow_html=True)
     primary, secondary, _ = st.columns([1.15, 1.25, 5])
@@ -267,6 +392,8 @@ def main() -> None:
     page = st.session_state["page"]
     if page == "home":
         render_home()
+    elif page == "data-intelligence":
+        render_data_intelligence()
     else:
         render_placeholder(page)
 

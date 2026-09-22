@@ -1,0 +1,86 @@
+{
+  "rows_before": 28,
+  "rows_after": 27,
+  "columns_before": 12,
+  "columns_after": 13,
+  "duplicates_before": 1,
+  "duplicates_removed": 1,
+  "missing_values_before": 2,
+  "missing_values_after": 0,
+  "invalid_numeric_values": {
+    "N": 0,
+    "P": 0,
+    "K": 0,
+    "pH": 0,
+    "Organic_Carbon": 0
+  },
+  "range_warnings": {
+    "N": 1,
+    "P": 0,
+    "K": 0,
+    "pH": 1,
+    "Organic_Carbon": 0
+  },
+  "outlier_counts": {
+    "N": 0,
+    "P": 0,
+    "K": 0,
+    "pH": 0,
+    "Organic_Carbon": 0
+  },
+  "imputation_values": {
+    "numeric": {
+      "N": 48.5,
+      "P": 30.5,
+      "K": 41.0,
+      "pH": 6.35,
+      "Organic_Carbon": 1.9,
+      "Moisture": 23.1,
+      "Temperature": 25.6,
+      "Rainfall": 620.0
+    },
+    "categorical": {
+      "Region": "East",
+      "Crop": "Barley",
+      "Soil_Type": "Loam",
+      "Fertility": "Medium"
+    }
+  },
+  "features": [
+    "N",
+    "P",
+    "K",
+    "pH",
+    "Organic_Carbon",
+    "Moisture",
+    "Temperature",
+    "Rainfall",
+    "NPK_Total",
+    "Region",
+    "Crop",
+    "Soil_Type"
+  ],
+  "numeric_features": [
+    "N",
+    "P",
+    "K",
+    "pH",
+    "Organic_Carbon",
+    "Moisture",
+    "Temperature",
+    "Rainfall",
+    "NPK_Total"
+  ],
+  "categorical_features": [
+    "Region",
+    "Crop",
+    "Soil_Type"
+  ],
+  "target": "Fertility",
+  "config": {
+    "remove_duplicates": true,
+    "impute_missing": true,
+    "flag_outliers": true,
+    "add_engineered_features": true
+  }
+}
