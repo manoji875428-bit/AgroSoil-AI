@@ -2,7 +2,7 @@
 
 ## Intelligent Soil Health Analysis & Fertilizer Recommendation System
 
-AGROSOIL AI is a premium Streamlit product experience for **DataXcelerate 2026, PS22**. Part 4 adds transparent, configurable nutrient status analysis on top of the Part 2 data foundation and alongside the Part 3 classifier.
+AGROSOIL AI is a premium Streamlit product experience for **DataXcelerate 2026, PS22**. Part 5 adds transparent, category-level fertilizer guidance on top of the Part 4 nutrient analysis and alongside the Part 3 classifier.
 
 ### Part 1 scope
 
@@ -57,6 +57,19 @@ The prototype uses only `N`, `P`, `K`, `pH` and `Organic_Carbon` as model inputs
 
 The Part 4 thresholds are explicitly **Demo/Prototype thresholds**. They are not universal agronomic facts and must be replaced with region- and crop-specific ranges validated by qualified agronomists and soil laboratories before production use. Part 4 does not generate fertilizer recommendations.
 
+### Part 5 completed
+
+- Reusable `modules/recommendation_engine.py` based on Part 4 analysis output
+- Nitrogen, phosphorus and potassium support-category guidance
+- General pH management guidance without chemical dosage claims
+- Organic matter-management categories including compost, well-decomposed organic matter, crop residues and suitable organic amendments
+- Dynamic High, Medium and Informational priorities based on analyzed statuses
+- Recommendation Summary with actual deficiency, high-condition and pH-monitoring findings
+- Smart Recommendations cards integrated into the existing Soil Health workflow
+- Explicit reasons for every recommendation and professional validation disclaimer
+
+Part 5 does not provide kg/hectare quantities, application frequency, guaranteed yield claims or universal agronomic recommendations. All output is prototype guidance and must be validated with crop, soil type, region and professional agronomic advice. Part 6 has not been started.
+
 ### Run locally
 
 ```bash
@@ -87,7 +100,10 @@ Then open the local URL shown by Streamlit, usually `http://localhost:8501`.
 │   ├── data_loader.py
 │   ├── data_utils.py
 │   ├── model.py
-│   └── preprocessing.py
+│   ├── nutrient_analysis.py
+│   ├── preprocessing.py
+│   └── recommendation_engine.py
+│
 └── assets/
 ```
 

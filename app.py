@@ -29,6 +29,7 @@ from modules.model import (
     train_from_processed_dataset,
 )
 from modules.nutrient_analysis import analyze_all_nutrients, analyze_npk
+from modules.recommendation_engine import generate_recommendations
 from modules.preprocessing import run_preprocessing
 
 
@@ -176,6 +177,18 @@ def get_css() -> str:
     .nutrient-status.adequate, .nutrient-status.suitable { background: rgba(183, 238, 101, .12); color: var(--lime); }
     .nutrient-status.high, .nutrient-status.alkaline { background: rgba(224, 180, 94, .14); color: var(--gold); }
     .nutrient-message { color: var(--muted); font-size: .75rem; line-height: 1.45; margin-top: .7rem; }
+    .recommendation-card { background: linear-gradient(145deg, rgba(24, 40, 29, .8), rgba(14, 26, 19, .72)); border: 1px solid var(--line); border-left: 3px solid var(--lime-soft); border-radius: 14px; padding: 1.1rem 1.25rem; margin-bottom: .75rem; }
+    .recommendation-card.high { border-left-color: #e6a482; }
+    .recommendation-card.medium { border-left-color: var(--gold); }
+    .recommendation-card.informational { border-left-color: var(--lime); }
+    .recommendation-top { align-items: center; display: flex; gap: .65rem; justify-content: space-between; }
+    .recommendation-nutrient { color: var(--ink); font-family: 'Manrope', sans-serif; font-size: 1rem; font-weight: 700; }
+    .recommendation-status { color: var(--muted); font-size: .72rem; letter-spacing: .1em; text-transform: uppercase; }
+    .recommendation-priority { border: 1px solid var(--line); border-radius: 99px; color: var(--lime); font-size: .64rem; font-weight: 700; letter-spacing: .1em; padding: .32rem .55rem; text-transform: uppercase; }
+    .recommendation-card.high .recommendation-priority { color: #e6a482; }
+    .recommendation-card.medium .recommendation-priority { color: var(--gold); }
+    .recommendation-copy { color: var(--muted-strong); font-size: .86rem; line-height: 1.55; margin: .75rem 0 .45rem; }
+    .recommendation-reason { color: var(--muted); font-size: .77rem; line-height: 1.45; }
     @keyframes rise { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
     @media (max-width: 900px) { .block-container { padding: 1.5rem 1.25rem 3rem; } .hero-grid { grid-template-columns: 1fr; } .hero-meta { border-left: 0; border-top: 1px solid var(--line); padding: 1.2rem 0 0; } .workflow { flex-wrap: wrap; } .workflow-card { flex: 1 1 30%; min-width: 130px; } .workflow-card::after { display: none; } }
     @media (max-width: 600px) { .hero-title { font-size: 3.1rem; } .section-head { align-items: start; flex-direction: column; gap: .4rem; } .workflow-card { flex-basis: 45%; } }
@@ -389,6 +402,31 @@ def render_nutrient_summary(analysis: dict) -> None:
             render_kpi_card(label, value, note, accent)
 
 
+def render_recommendations(analysis: dict) -> None:
+    recommendation_output = generate_recommendations(analysis)
+    summary = recommendation_output["summary"]
+    st.markdown('<div class="section">', unsafe_allow_html=True)
+    render_section_header("Smart recommendations", "Recommendation Summary", "Category-level prototype guidance based on the analyzed nutrient statuses.")
+    summary_columns = st.columns(3)
+    summary_items = [
+        ("DETECTED ISSUES", str(summary["detected_issue_count"]), "Low, high or pH conditions", True),
+        ("DEFICIENCIES", str(summary["deficiency_count"]), "Low nutrient statuses", False),
+        ("GUIDANCE MODE", "PROTOTYPE", "No dosage or yield claims", False),
+    ]
+    for column, (label, value, note, accent) in zip(summary_columns, summary_items):
+        with column:
+            render_kpi_card(label, value, note, accent)
+    st.markdown('<div class="about-panel" style="margin:1rem 0 1.25rem;"><div class="section-label">What the analysis found</div><div class="placeholder-copy">' + "<br>".join(summary["summary_lines"]) + '</div></div>', unsafe_allow_html=True)
+    for item in recommendation_output["recommendations"]:
+        priority_class = item["priority"].lower()
+        st.markdown(
+            f'<div class="recommendation-card {priority_class}"><div class="recommendation-top"><div><span class="recommendation-nutrient">{item["nutrient"]}</span><span class="recommendation-status"> · {item["status"]}</span></div><span class="recommendation-priority">{item["priority"]}</span></div><div class="recommendation-copy"><strong>Recommendation:</strong> {item["recommendation"]}</div><div class="recommendation-reason"><strong>Reason:</strong> {item["reason"]}</div></div>',
+            unsafe_allow_html=True,
+        )
+    st.info(summary["guidance_note"])
+    st.markdown('</div>', unsafe_allow_html=True)
+
+
 def render_nutrient_intelligence() -> None:
     st.markdown('<div class="hero"><div class="hero-grid"><div><div class="eyebrow">◫ NUTRIENT INTELLIGENCE · PART 4</div><h1 class="hero-title">Read what is<br><span>in the soil.</span></h1><p class="hero-copy">Transparent, configurable nutrient analysis for nitrogen, phosphorus, potassium, pH and organic carbon. Every status is rule-based and explainable.</p></div><div class="hero-meta"><div class="hero-meta-title">Demo / Prototype thresholds</div><div class="hero-meta-value">Configurable by design.</div><div class="hero-meta-copy">These thresholds are placeholders for prototype validation and must be replaced with region- and crop-specific agronomic ranges for production.</div></div></div></div>', unsafe_allow_html=True)
     try:
@@ -499,6 +537,7 @@ def render_soil_health() -> None:
             render_nutrient_cards(nutrient_result)
             render_nutrient_summary(nutrient_result)
             st.markdown(f'<div class="about-panel" style="margin-top:1rem;"><div class="section-label">NPK pattern</div><div class="placeholder-copy">{analyze_npk(nutrient_result["values"])["pattern"]}. No fertilizer recommendation is generated in Part 4.</div></div>', unsafe_allow_html=True)
+            render_recommendations(nutrient_result)
             st.plotly_chart(prediction_probability_figure(result["probabilities"]), use_container_width=True, config={"displayModeBar": False})
         except (ValueError, TypeError, KeyError, OSError) as error:
             st.error(f"The soil profile could not be analyzed: {error}")
