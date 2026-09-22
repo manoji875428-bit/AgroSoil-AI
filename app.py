@@ -10,8 +10,20 @@ from modules.analytics import (
     class_distribution_figure,
     correlation_figure,
     confusion_matrix_figure,
+    calculate_correlation_data,
+    calculate_crop_statistics,
+    calculate_deficiency_distribution,
+    calculate_fertility_distribution,
+    calculate_nutrient_statistics,
+    calculate_region_statistics,
+    deficiency_pattern_figure,
     feature_importance_figure,
+    fertility_by_group_figure,
+    grouped_crop_nutrient_figure,
+    grouped_region_nutrient_figure,
+    load_analytics_data,
     npk_comparison_figure,
+    normalized_npk_figure,
     nutrient_distribution_figure,
     nutrient_status_figure,
     probability_comparison_figure,
@@ -222,6 +234,11 @@ def get_css() -> str:
 
 def go_to(page: str) -> None:
     st.session_state["page"] = page
+
+
+@st.cache_data
+def load_dashboard_data() -> tuple[pd.DataFrame | None, str | None]:
+    return load_analytics_data(default_processed_path())
 
 
 def render_sidebar() -> None:
@@ -867,6 +884,137 @@ def render_model_insights() -> None:
     st.markdown('</div>', unsafe_allow_html=True)
 
 
+def render_analytics_dashboard(regional_only: bool = False) -> None:
+    title = "Regional Soil Insights" if regional_only else "Analytics Dashboard"
+    eyebrow = "⌖ REGIONAL INSIGHTS · PART 10" if regional_only else "▦ ANALYTICS DASHBOARD · PART 10"
+    subtitle = "Compare actual nutrient and fertility patterns across the available regions." if regional_only else "Turn the processed soil dataset into interactive nutrient, fertility, crop and regional insight."
+    st.markdown(f'<div class="hero"><div class="hero-grid"><div><div class="eyebrow">{eyebrow}</div><h1 class="hero-title">{title.split()[0]} <span>{" ".join(title.split()[1:])}</span></h1><p class="hero-copy">{subtitle}</p></div><div class="hero-meta"><div class="hero-meta-title">Data intelligence pipeline</div><div class="hero-meta-value">Aggregate what is real.</div><div class="hero-meta-copy">Processed Soil Data → Filtering → Aggregation → Pattern Detection → Interactive Analytics. Designed to scale to distributed processing for larger datasets.</div></div></div></div>', unsafe_allow_html=True)
+    dataframe, load_error = load_dashboard_data()
+    if load_error or dataframe is None:
+        st.error(load_error or "The analytics dataset is unavailable.")
+        return
+
+    available_numeric = [column for column in [*NUMERIC_FEATURES, "Moisture", "Temperature", "Rainfall"] if column in dataframe.columns]
+    available_filters = [column for column in ["Region", "Crop", "Soil_Type", "Fertility"] if column in dataframe.columns]
+    st.markdown('<div class="section">', unsafe_allow_html=True)
+    render_section_header("DATA INTELLIGENCE", "Filter the evidence", "Every chart below is calculated from the processed dataset; unavailable dimensions are not invented.")
+    filter_columns = st.columns(4)
+    filter_values: dict[str, list[object]] = {}
+    for column, filter_name in zip(filter_columns, available_filters):
+        options = sorted(dataframe[filter_name].dropna().astype(str).unique().tolist())
+        with column:
+            selected = st.multiselect(filter_name, options, default=options, key=f"analytics-filter-{filter_name}")
+            filter_values[filter_name] = selected
+    selected_nutrient = st.selectbox("Nutrient distribution", available_numeric or ["N/A"], key="analytics-nutrient-selector")
+    filtered = dataframe.copy()
+    for filter_name, selected in filter_values.items():
+        filtered = filtered[filtered[filter_name].astype(str).isin(selected)]
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    if filtered.empty:
+        st.warning("No rows match the selected filters. Adjust the filters to continue.")
+        return
+
+    statistics = calculate_nutrient_statistics(filtered)
+    averages = statistics["mean"].to_dict() if not statistics.empty else {}
+    st.markdown('<div class="section">', unsafe_allow_html=True)
+    render_section_header("Dataset overview", "The filtered field of view", f"{len(filtered)} of {len(dataframe)} processed samples are in view.")
+    kpi_items = [
+        ("TOTAL SOIL SAMPLES", str(len(filtered)), "Filtered rows", True),
+        ("AVERAGE NITROGEN", f'{averages.get("N", "N/A"):.2f}' if "N" in averages else "N/A", "Processed mean", False),
+        ("AVERAGE PHOSPHORUS", f'{averages.get("P", "N/A"):.2f}' if "P" in averages else "N/A", "Processed mean", False),
+        ("AVERAGE POTASSIUM", f'{averages.get("K", "N/A"):.2f}' if "K" in averages else "N/A", "Processed mean", False),
+        ("AVERAGE PH", f'{averages.get("pH", "N/A"):.2f}' if "pH" in averages else "N/A", "Processed mean", False),
+        ("AVERAGE ORGANIC CARBON", f'{averages.get("Organic Carbon", "N/A"):.2f}' if "Organic Carbon" in averages else "N/A", "Processed mean", False),
+    ]
+    for row_start in range(0, len(kpi_items), 3):
+        kpi_columns = st.columns(3)
+        for column, (label, value, note, accent) in zip(kpi_columns, kpi_items[row_start:row_start + 3]):
+            with column:
+                render_kpi_card(label, value, note, accent)
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    st.markdown('<div class="section">', unsafe_allow_html=True)
+    render_section_header("Nutrient analytics", "Read distributions and scale", "NPK is shown both as a selected raw distribution and as standardized values because absolute nutrient scales differ.")
+    chart_columns = st.columns(2)
+    with chart_columns[0]:
+        if selected_nutrient != "N/A":
+            st.plotly_chart(nutrient_distribution_figure(filtered, selected_nutrient), use_container_width=True, config={"displayModeBar": False})
+    with chart_columns[1]:
+        if all(column in filtered.columns for column in ["N", "P", "K"]):
+            st.plotly_chart(normalized_npk_figure(filtered), use_container_width=True, config={"displayModeBar": False})
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    st.markdown('<div class="section">', unsafe_allow_html=True)
+    render_section_header("Fertility distribution", "What the labels say", "Counts and percentages use the actual Fertility labels in the processed dataset.")
+    if "Fertility" in filtered.columns:
+        fertility_data = calculate_fertility_distribution(filtered)
+        st.plotly_chart(class_distribution_figure(filtered), use_container_width=True, config={"displayModeBar": False})
+        st.dataframe(fertility_data, use_container_width=True, hide_index=True)
+    else:
+        st.info("Fertility labels are not available in the current dataset.")
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    st.markdown('<div class="section">', unsafe_allow_html=True)
+    render_section_header("Deficiency patterns", "Find recurring nutrient conditions", "Patterns use the existing Part 4 Demo/Prototype thresholds; they are not new agronomic thresholds.")
+    deficiency_data = calculate_deficiency_distribution(filtered)
+    if deficiency_data.empty:
+        st.info("Nutrient status patterns are not available for the current filtered data.")
+    else:
+        st.plotly_chart(deficiency_pattern_figure(deficiency_data.head(12)), use_container_width=True, config={"displayModeBar": False})
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    st.markdown('<div class="section">', unsafe_allow_html=True)
+    render_section_header("Correlation analysis", "See statistical association", "Correlation indicates statistical association in the dataset; it does not prove causation.")
+    correlation_data = calculate_correlation_data(filtered)
+    if not correlation_data.empty:
+        st.plotly_chart(correlation_figure(filtered, correlation_data.columns.tolist()), use_container_width=True, config={"displayModeBar": False})
+    else:
+        st.info("Correlation data is not available for the current dataset.")
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    if "Region" in filtered.columns:
+        st.markdown('<div class="section">', unsafe_allow_html=True)
+        render_section_header("Regional soil overview", "Compare the available regions", "Regional analytics are statistical comparisons; geographic coordinates are not available in this dataset.")
+        region_stats = calculate_region_statistics(filtered)
+        region_options = sorted(filtered["Region"].astype(str).unique().tolist())
+        selected_region = st.selectbox("Select Region", region_options, key=f"region-selector-{regional_only}")
+        region_data = filtered[filtered["Region"].astype(str) == selected_region]
+        region_columns = st.columns(2)
+        with region_columns[0]:
+            st.plotly_chart(grouped_region_nutrient_figure(region_stats, "N") if "N" in region_stats.columns else regional_summary_figure(filtered), use_container_width=True, config={"displayModeBar": False})
+        with region_columns[1]:
+            region_fertility = calculate_fertility_distribution(filtered, "Region")
+            st.plotly_chart(fertility_by_group_figure(region_fertility, "Region") if not region_fertility.empty else regional_summary_figure(filtered), use_container_width=True, config={"displayModeBar": False})
+        selected_region_stats = region_data[[column for column in NUMERIC_FEATURES if column in region_data.columns]].mean(numeric_only=True).round(2).rename("Mean").reset_index().rename(columns={"index": "Feature"})
+        st.dataframe(selected_region_stats, use_container_width=True, hide_index=True)
+        st.info("Geographic coordinates are not available in the current dataset. Regional analytics are shown as statistical comparisons.")
+        st.markdown('</div>', unsafe_allow_html=True)
+    else:
+        st.info("Regional data not available in the current dataset.")
+
+    if "Crop" in filtered.columns:
+        st.markdown('<div class="section">', unsafe_allow_html=True)
+        render_section_header("Crop insights", "Compare crop context", "Crop-level nutrient patterns are descriptive dataset comparisons, not causal conclusions.")
+        crop_stats = calculate_crop_statistics(filtered)
+        crop_options = sorted(filtered["Crop"].astype(str).unique().tolist())
+        selected_crop = st.selectbox("Select Crop", crop_options, key=f"crop-selector-{regional_only}")
+        crop_columns = st.columns(2)
+        with crop_columns[0]:
+            st.plotly_chart(grouped_crop_nutrient_figure(crop_stats, "N") if "N" in crop_stats.columns else nutrient_distribution_figure(filtered, selected_nutrient), use_container_width=True, config={"displayModeBar": False})
+        with crop_columns[1]:
+            crop_fertility = calculate_fertility_distribution(filtered[filtered["Crop"].astype(str) == selected_crop])
+            st.plotly_chart(class_distribution_figure(filtered[filtered["Crop"].astype(str) == selected_crop]) if "Fertility" in filtered.columns else nutrient_distribution_figure(filtered, selected_nutrient), use_container_width=True, config={"displayModeBar": False})
+        st.dataframe(crop_stats, use_container_width=True, hide_index=True)
+        st.markdown('</div>', unsafe_allow_html=True)
+    else:
+        st.info("Crop data not available in the current dataset.")
+
+    with st.expander("View Filtered Data"):
+        visible_columns = [column for column in ["N", "P", "K", "pH", "Organic_Carbon", "Region", "Crop", "Soil_Type", "Fertility"] if column in filtered.columns]
+        st.dataframe(filtered[visible_columns], use_container_width=True, hide_index=True)
+
+
 def render_home() -> None:
     st.markdown('<div class="hero"><div class="hero-grid"><div><div class="eyebrow">🌱 DataXcelerate 2026 · Problem Statement 22</div><h1 class="hero-title">Understand Your Soil.<br><span>Grow Smarter.</span></h1><p class="hero-copy">AI-powered soil intelligence for nutrient analysis, fertility prediction and data-driven agricultural decisions.</p></div><div class="hero-meta"><div class="hero-meta-title">The intelligence layer for modern farms</div><div class="hero-meta-value">From soil signals to smarter action.</div><div class="hero-meta-copy">A single, focused workspace for turning the hidden story beneath every field into an advantage.</div></div></div></div>', unsafe_allow_html=True)
     primary, secondary, _ = st.columns([1.15, 1.25, 5])
@@ -955,6 +1103,10 @@ def main() -> None:
         render_farmer_experience()
     elif page == "simulator":
         render_what_if_simulator()
+    elif page == "analytics":
+        render_analytics_dashboard()
+    elif page == "regional-insights":
+        render_analytics_dashboard(regional_only=True)
     elif page == "data-intelligence":
         render_data_intelligence()
     elif page == "nutrient-intelligence":

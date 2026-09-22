@@ -2,7 +2,7 @@
 
 ## Intelligent Soil Health Analysis & Fertilizer Recommendation System
 
-AGROSOIL AI is a premium Streamlit product experience for **DataXcelerate 2026, PS22**. Part 9 adds a genuine before-and-after What-If simulation layer around the existing trained classifier.
+AGROSOIL AI is a premium Streamlit product experience for **DataXcelerate 2026, PS22**. Part 10 adds an interactive analytics and regional-insights layer over the actual processed soil dataset.
 
 ### Part 1 scope
 
@@ -122,6 +122,23 @@ Farmer Experience Mode is a preliminary observation workflow. It does not fabric
 - Validation for missing, non-numeric, non-finite, negative and invalid-pH inputs
 
 The simulator changes model inputs only. It does not calculate fertilizer dosage, convert image or farmer observations into chemical values, claim guaranteed crop outcomes, or act as a laboratory test. The underlying model is trained on demo/synthetic data for prototype validation.
+
+### Part 10 completed
+
+- Cached Analytics Dashboard and Regional Insights views
+- Dataset KPIs for sample count and available nutrient means
+- Dynamic Region, Crop, Soil Type and Fertility filters when those columns exist
+- Interactive nutrient distribution selection and standardized NPK comparison
+- Actual fertility counts and percentages
+- Deficiency-pattern analysis using the existing Part 4 Demo/Prototype thresholds
+- Correlation heatmap with the statistical-association limitation
+- Regional sample, nutrient-average and fertility comparisons
+- Crop-level nutrient and fertility comparisons
+- Explicit no-coordinate map message when latitude/longitude are unavailable
+- Optional filtered-data table with visible project columns only
+- Big Data Analytics presentation from processed data through aggregation and pattern detection
+
+Part 10 uses `data/processed/soil_processed.csv` only. It does not fabricate regions, crops, coordinates, measurements, fertility labels or deficiency statistics. The current dataset is a small demo/synthetic dataset; the dashboard structure is designed to scale to larger or distributed processing later, but it does not claim Spark/Hadoop execution.
 
 ### Run locally
 
