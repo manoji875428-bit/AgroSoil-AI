@@ -2,7 +2,7 @@
 
 ## Intelligent Soil Health Analysis & Fertilizer Recommendation System
 
-AGROSOIL AI is a premium Streamlit product experience for **DataXcelerate 2026, PS22**. Part 6 adds a transparent soil-report OCR layer on top of the existing Part 3–5 analysis pipeline.
+AGROSOIL AI is a premium Streamlit product experience for **DataXcelerate 2026, PS22**. Part 7 adds a preliminary visual soil-image assessment layer alongside the existing Part 3–6 analysis pipeline.
 
 ### Part 1 scope
 
@@ -86,6 +86,18 @@ Install the Python dependencies with `pip install -r requirements.txt`. Image OC
 
 PDF support extracts embedded text with `pypdf`. Image-only/scanned PDFs require a PDF-to-image converter plus Tesseract and are reported as unsupported when those local tools are unavailable. OCR extracts values from the laboratory report; it does not perform the soil chemical test. Always verify extracted values against the original report before using the analysis.
 
+### Part 7 completed
+
+- Soil Image Mode for JPG, JPEG and PNG uploads
+- Image preview, dimensions, aspect ratio, brightness and basic quality checks
+- Descriptive visible color categories such as dark brown, brown, light brown, reddish/brown and grayish/brown
+- Approximate visual texture categories and visible moisture indication
+- Clear “Preliminary Visual Soil Assessment” boundary in the UI
+- Scientific disclaimer that RGB images cannot directly determine exact N, P, K, pH or Organic Carbon
+- No image-derived values are sent into the ML model or fertilizer recommendation engine
+
+Soil Image Mode uses Pillow and NumPy image characteristics only. Visual texture and moisture are approximate observations, not laboratory particle-size analysis or measured moisture percentages. Laboratory soil values are required for fertility prediction and should be supplied through Soil Report Mode or verified manual input.
+
 ### Run locally
 
 ```bash
@@ -119,7 +131,8 @@ Then open the local URL shown by Streamlit, usually `http://localhost:8501`.
 │   ├── nutrient_analysis.py
 │   ├── preprocessing.py
 │   ├── recommendation_engine.py
-│   └── ocr.py
+│   ├── ocr.py
+│   └── soil_image.py
 │
 └── assets/
 ```

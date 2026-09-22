@@ -32,6 +32,7 @@ from modules.nutrient_analysis import analyze_all_nutrients, analyze_npk
 from modules.ocr import process_soil_report, validate_extracted_values
 from modules.recommendation_engine import generate_recommendations
 from modules.preprocessing import run_preprocessing
+from modules.soil_image import generate_visual_assessment
 
 
 st.set_page_config(
@@ -190,6 +191,10 @@ def get_css() -> str:
     .recommendation-card.medium .recommendation-priority { color: var(--gold); }
     .recommendation-copy { color: var(--muted-strong); font-size: .86rem; line-height: 1.55; margin: .75rem 0 .45rem; }
     .recommendation-reason { color: var(--muted); font-size: .77rem; line-height: 1.45; }
+    .visual-card { background: linear-gradient(145deg, rgba(24, 40, 29, .8), rgba(14, 26, 19, .72)); border: 1px solid var(--line); border-radius: 16px; min-height: 155px; padding: 1.2rem; }
+    .visual-label { color: var(--muted); font-size: .68rem; font-weight: 700; letter-spacing: .11em; text-transform: uppercase; }
+    .visual-value { color: var(--ink); font-family: 'Manrope', sans-serif; font-size: 1.3rem; font-weight: 700; margin: .85rem 0 .5rem; }
+    .visual-copy { color: var(--muted); font-size: .78rem; line-height: 1.5; }
     @keyframes rise { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
     @media (max-width: 900px) { .block-container { padding: 1.5rem 1.25rem 3rem; } .hero-grid { grid-template-columns: 1fr; } .hero-meta { border-left: 0; border-top: 1px solid var(--line); padding: 1.2rem 0 0; } .workflow { flex-wrap: wrap; } .workflow-card { flex: 1 1 30%; min-width: 130px; } .workflow-card::after { display: none; } }
     @media (max-width: 600px) { .hero-title { font-size: 3.1rem; } .section-head { align-items: start; flex-direction: column; gap: .4rem; } .workflow-card { flex-basis: 45%; } }
@@ -491,6 +496,48 @@ def render_soil_report() -> None:
             st.error(f"The extracted soil report could not be analyzed: {error}")
 
 
+def render_soil_image() -> None:
+    st.markdown('<div class="hero"><div class="hero-grid"><div><div class="eyebrow">◉ SOIL IMAGE · PART 7</div><h1 class="hero-title">Look closer at<br><span>the surface.</span></h1><p class="hero-copy">Upload a soil photograph for a preliminary visual assessment of visible color, texture, moisture indication and image quality.</p></div><div class="hero-meta"><div class="hero-meta-title">Visual assessment only</div><div class="hero-meta-value">No chemical guesses.</div><div class="hero-meta-copy">A normal RGB photograph cannot directly determine exact N, P, K, pH or Organic Carbon values.</div></div></div></div>', unsafe_allow_html=True)
+    st.info("Image analysis provides preliminary visual observations. It does not replace laboratory soil testing and cannot directly determine exact N, P, K, pH, or Organic Carbon.")
+    uploaded_image = st.file_uploader("Upload Soil Image", type=["jpg", "jpeg", "png"], label_visibility="collapsed")
+    if uploaded_image is None:
+        st.markdown('<div class="about-panel"><div class="section-label">Upload Soil Image</div><div class="placeholder-copy">Supported formats: JPG, JPEG and PNG. Upload a clear, well-lit soil photograph for the most useful visual assessment.</div></div>', unsafe_allow_html=True)
+        return
+
+    image_bytes = uploaded_image.getvalue()
+    assessment = generate_visual_assessment(image_bytes)
+    if not assessment.get("valid"):
+        st.error(assessment.get("error", "The uploaded image could not be assessed."))
+        return
+
+    preview_column, quality_column = st.columns([1.2, 1])
+    with preview_column:
+        st.image(image_bytes, caption="Uploaded soil photograph", use_container_width=True)
+    with quality_column:
+        quality = assessment["quality"]
+        st.markdown(f'<div class="visual-card"><div class="visual-label">IMAGE QUALITY</div><div class="visual-value">{quality["status"]}</div><div class="visual-copy">{quality["message"]}</div><div class="status-pill">{quality["width"]} × {quality["height"]} · {quality["aspect_ratio"]}:1</div></div>', unsafe_allow_html=True)
+        if quality["issues"]:
+            st.warning(" · ".join(quality["issues"]))
+
+    st.markdown('<div class="section">', unsafe_allow_html=True)
+    render_section_header("Preliminary visual assessment", "What is visible in the photograph", "These are descriptive image observations, not laboratory measurements.")
+    visual_columns = st.columns(3)
+    visual_items = [
+        ("VISIBLE SOIL COLOR", assessment["color"]["category"], assessment["color"]["note"]),
+        ("APPROXIMATE TEXTURE", assessment["texture"]["category"], assessment["texture"]["note"]),
+        ("MOISTURE INDICATION", assessment["moisture"]["category"], assessment["moisture"]["note"]),
+    ]
+    for column, (label, value, note) in zip(visual_columns, visual_items):
+        with column:
+            st.markdown(f'<div class="visual-card"><div class="visual-label">{label}</div><div class="visual-value">{value}</div><div class="visual-copy">{note}</div></div>', unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    st.markdown('<div class="section">', unsafe_allow_html=True)
+    render_section_header("Assessment summary", "A visual signal, not a soil test", assessment["summary"])
+    st.markdown('<div class="about-panel"><div class="section-label">Important boundary</div><div class="placeholder-copy">Laboratory soil values are required for fertility prediction. Continue with Soil Report Mode or enter verified manual soil values when exact N, P, K, pH and Organic Carbon analysis is needed.</div></div>', unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
+
+
 def render_nutrient_intelligence() -> None:
     st.markdown('<div class="hero"><div class="hero-grid"><div><div class="eyebrow">◫ NUTRIENT INTELLIGENCE · PART 4</div><h1 class="hero-title">Read what is<br><span>in the soil.</span></h1><p class="hero-copy">Transparent, configurable nutrient analysis for nitrogen, phosphorus, potassium, pH and organic carbon. Every status is rule-based and explainable.</p></div><div class="hero-meta"><div class="hero-meta-title">Demo / Prototype thresholds</div><div class="hero-meta-value">Configurable by design.</div><div class="hero-meta-copy">These thresholds are placeholders for prototype validation and must be replaced with region- and crop-specific agronomic ranges for production.</div></div></div></div>', unsafe_allow_html=True)
     try:
@@ -702,6 +749,8 @@ def main() -> None:
         render_home()
     elif page == "soil-report":
         render_soil_report()
+    elif page == "soil-image":
+        render_soil_image()
     elif page == "data-intelligence":
         render_data_intelligence()
     elif page == "nutrient-intelligence":
