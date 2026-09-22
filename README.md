@@ -2,7 +2,7 @@
 
 ## Intelligent Soil Health Analysis & Fertilizer Recommendation System
 
-AGROSOIL AI is a premium Streamlit product experience for **DataXcelerate 2026, PS22**. Part 2 adds a transparent soil-data loading, validation, preprocessing and analytics foundation for future ML work.
+AGROSOIL AI is a premium Streamlit product experience for **DataXcelerate 2026, PS22**. Part 3 adds a supervised Random Forest prototype for soil fertility classification on top of the transparent Part 2 data foundation.
 
 ### Part 1 scope
 
@@ -30,6 +30,20 @@ AGROSOIL AI is a premium Streamlit product experience for **DataXcelerate 2026, 
 
 The demo CSV is synthetic development data. It does not represent real agricultural measurements or farm soil, and it must be replaced with a validated real-world dataset before production use.
 
+### Part 3 completed
+
+- Reproducible stratified 80/20 train/test split with `random_state=42`
+- Random Forest Classifier with 200 estimators and balanced class weights
+- Weighted accuracy, precision, recall, F1 score, classification report and confusion matrix
+- Direct feature importance from the trained forest
+- Saved model artifact at `models/soil_fertility_model.joblib`
+- Saved model card and evaluation metadata at `models/model_metadata.json`
+- Soil Health page with model status, evaluation charts and real inference
+- Model Insights page with training contract, limitations and feature importance
+- Probability output labelled as model confidence, not certainty
+
+The prototype uses only `N`, `P`, `K`, `pH` and `Organic_Carbon` as model inputs. `NPK_Total` is retained in the processed dataset for later analysis but is excluded from the classifier to avoid redundant inputs. The model is trained using demo/synthetic data for prototype validation. Its evaluation does not establish real-world agricultural or laboratory-level accuracy, and predictions should not replace laboratory soil testing.
+
 ### Run locally
 
 ```bash
@@ -53,10 +67,13 @@ Then open the local URL shown by Streamlit, usually `http://localhost:8501`.
 │   ├── raw/
 │   └── processed/
 ├── models/
+│   ├── model_metadata.json
+│   └── soil_fertility_model.joblib
 ├── modules/
 │   ├── analytics.py
 │   ├── data_loader.py
 │   ├── data_utils.py
+│   ├── model.py
 │   └── preprocessing.py
 └── assets/
 ```

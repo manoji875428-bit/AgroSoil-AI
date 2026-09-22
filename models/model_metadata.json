@@ -1,0 +1,96 @@
+{
+  "model_name": "Random Forest Classifier",
+  "features": [
+    "N",
+    "P",
+    "K",
+    "pH",
+    "Organic_Carbon"
+  ],
+  "target": "Fertility",
+  "classes": [
+    "Low",
+    "Medium",
+    "High"
+  ],
+  "training_samples": 21,
+  "testing_samples": 6,
+  "training_class_distribution": {
+    "Medium": 9,
+    "High": 6,
+    "Low": 6
+  },
+  "random_state": 42,
+  "prototype_dataset": true,
+  "accuracy": 0.8333333333333334,
+  "precision": 0.8888888888888888,
+  "recall": 0.8333333333333334,
+  "f1_score": 0.8222222222222223,
+  "classification_report": {
+    "Low": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 2.0
+    },
+    "Medium": {
+      "precision": 0.6666666666666666,
+      "recall": 1.0,
+      "f1-score": 0.8,
+      "support": 2.0
+    },
+    "High": {
+      "precision": 1.0,
+      "recall": 0.5,
+      "f1-score": 0.6666666666666666,
+      "support": 2.0
+    },
+    "accuracy": 0.8333333333333334,
+    "macro avg": {
+      "precision": 0.8888888888888888,
+      "recall": 0.8333333333333334,
+      "f1-score": 0.8222222222222223,
+      "support": 6.0
+    },
+    "weighted avg": {
+      "precision": 0.8888888888888888,
+      "recall": 0.8333333333333334,
+      "f1-score": 0.8222222222222223,
+      "support": 6.0
+    }
+  },
+  "confusion_matrix": [
+    [
+      2,
+      0,
+      0
+    ],
+    [
+      0,
+      2,
+      0
+    ],
+    [
+      0,
+      1,
+      1
+    ]
+  ],
+  "class_order": [
+    "Low",
+    "Medium",
+    "High"
+  ],
+  "test_class_distribution": {
+    "Low": 2,
+    "Medium": 2,
+    "High": 2
+  },
+  "feature_importance": {
+    "N": 0.17373981526391466,
+    "P": 0.21814958736186307,
+    "K": 0.22734815436834374,
+    "pH": 0.18273045036572505,
+    "Organic_Carbon": 0.19803199264015364
+  }
+}

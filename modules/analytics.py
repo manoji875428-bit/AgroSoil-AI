@@ -78,3 +78,47 @@ def regional_summary_figure(dataframe: pd.DataFrame, region_column: str = "Regio
         color_discrete_sequence=[SECONDARY],
     )
     return _figure_layout(figure)
+
+
+def feature_importance_figure(importances: dict[str, float]) -> go.Figure:
+    importance_frame = pd.DataFrame({"Feature": list(importances), "Importance": list(importances.values())})
+    importance_frame = importance_frame.sort_values("Importance", ascending=True)
+    figure = px.bar(
+        importance_frame,
+        x="Importance",
+        y="Feature",
+        orientation="h",
+        title="Random Forest feature importance",
+        color="Importance",
+        color_continuous_scale=[[0, "#39734b"], [1, "#b7ee65"]],
+    )
+    figure.update_coloraxes(showscale=False)
+    return _figure_layout(figure)
+
+
+def confusion_matrix_figure(matrix: list[list[int]], class_order: list[str]) -> go.Figure:
+    figure = px.imshow(
+        matrix,
+        x=class_order,
+        y=class_order,
+        text_auto=True,
+        color_continuous_scale=[[0, "#102319"], [.5, "#39734b"], [1, "#b7ee65"]],
+        title="Confusion matrix · actual vs predicted",
+        labels={"x": "Predicted class", "y": "Actual class", "color": "Samples"},
+    )
+    return _figure_layout(figure, height=360)
+
+
+def prediction_probability_figure(probabilities: dict[str, float]) -> go.Figure:
+    probability_frame = pd.DataFrame({"Class": list(probabilities), "Probability": list(probabilities.values())})
+    figure = px.bar(
+        probability_frame,
+        x="Class",
+        y="Probability",
+        title="Prediction probabilities",
+        color="Class",
+        color_discrete_map={"Low": "#d88962", "Medium": GOLD, "High": ACCENT},
+    )
+    figure.update_yaxes(range=[0, 1], tickformat=".0%")
+    figure.update_traces(hovertemplate="%{x}: %{y:.1%}<extra></extra>")
+    return _figure_layout(figure)

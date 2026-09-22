@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pandas as pd
@@ -8,11 +9,23 @@ import streamlit as st
 from modules.analytics import (
     class_distribution_figure,
     correlation_figure,
+    confusion_matrix_figure,
+    feature_importance_figure,
     nutrient_distribution_figure,
+    prediction_probability_figure,
     regional_summary_figure,
 )
 from modules.data_loader import get_dataset_summary, load_raw_dataset, validate_dataset
 from modules.data_utils import NUMERIC_FEATURES, TARGET_COLUMN, default_processed_path, default_raw_path
+from modules.model import (
+    MODEL_METADATA_PATH,
+    MODEL_NAME,
+    MODEL_PATH,
+    REQUIRED_FEATURES,
+    load_model,
+    predict_fertility,
+    train_from_processed_dataset,
+)
 from modules.preprocessing import run_preprocessing
 
 
@@ -312,6 +325,112 @@ def render_data_intelligence() -> None:
     st.markdown('</div>', unsafe_allow_html=True)
 
 
+def load_model_artifacts() -> tuple[object | None, dict | None, str | None]:
+    try:
+        if not MODEL_PATH.exists() or not MODEL_METADATA_PATH.exists():
+            model, metadata = train_from_processed_dataset()
+            return model, metadata, None
+        model = load_model()
+        metadata = json.loads(MODEL_METADATA_PATH.read_text(encoding="utf-8"))
+        return model, metadata, None
+    except (FileNotFoundError, OSError, ValueError, TypeError) as error:
+        return None, None, str(error)
+
+
+def render_model_kpis(metadata: dict) -> None:
+    metric_columns = st.columns(4)
+    metrics = [
+        ("ACCURACY", metadata.get("accuracy", 0), "Prototype dataset evaluation", True),
+        ("PRECISION", metadata.get("precision", 0), "Weighted precision", False),
+        ("RECALL", metadata.get("recall", 0), "Weighted recall", False),
+        ("F1 SCORE", metadata.get("f1_score", 0), "Weighted F1 score", False),
+    ]
+    for column, (label, value, note, accent) in zip(metric_columns, metrics):
+        with column:
+            render_kpi_card(label, f"{float(value):.1%}", note, accent)
+
+
+def render_soil_health() -> None:
+    st.markdown('<div class="hero"><div class="hero-grid"><div><div class="eyebrow">◈ SOIL HEALTH · PART 3</div><h1 class="hero-title">From soil signals<br><span>to a class.</span></h1><p class="hero-copy">A supervised Random Forest prototype that classifies fertility from validated soil measurements. Inspect the model, then test one soil profile.</p></div><div class="hero-meta"><div class="hero-meta-title">Prototype model</div><div class="hero-meta-value">Random Forest Classifier</div><div class="hero-meta-copy">Trained using demo/synthetic data for prototype validation. This output does not replace laboratory soil testing.</div></div></div></div>', unsafe_allow_html=True)
+    model, metadata, model_error = load_model_artifacts()
+    if model_error or model is None or metadata is None:
+        st.error(f"Model is unavailable: {model_error or 'No model metadata was returned.'}")
+        return
+
+    st.markdown('<div class="section">', unsafe_allow_html=True)
+    render_section_header("Model status", "A trained prototype, ready to inspect", "The feature order is shared by training and inference to avoid input drift.")
+    status_columns = st.columns(4)
+    status_items = [
+        ("MODEL", "Random Forest", MODEL_NAME),
+        ("STATUS", "Trained", "Artifact loaded successfully"),
+        ("TRAINING SAMPLES", str(metadata.get("training_samples", "--")), "Stratified training split"),
+        ("TESTING SAMPLES", str(metadata.get("testing_samples", "--")), f"{len(metadata.get('features', []))} model features"),
+    ]
+    for column, (label, value, note) in zip(status_columns, status_items):
+        with column:
+            render_kpi_card(label, value, note, label == "STATUS")
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    st.markdown('<div class="section">', unsafe_allow_html=True)
+    render_section_header("Model performance", "Prototype dataset evaluation", "Metrics describe this small synthetic validation split and are not evidence of real-world agricultural accuracy.")
+    render_model_kpis(metadata)
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    chart_columns = st.columns(2)
+    with chart_columns[0]:
+        st.markdown('<div class="section">', unsafe_allow_html=True)
+        render_section_header("Evaluation", "Where the model was right", "Rows are actual classes; columns are predicted classes.")
+        st.plotly_chart(confusion_matrix_figure(metadata["confusion_matrix"], metadata["class_order"]), use_container_width=True, config={"displayModeBar": False})
+        st.markdown('</div>', unsafe_allow_html=True)
+    with chart_columns[1]:
+        st.markdown('<div class="section">', unsafe_allow_html=True)
+        render_section_header("Model insights", "Which signals mattered most", "Feature importance is calculated directly from the trained Random Forest.")
+        st.plotly_chart(feature_importance_figure(metadata["feature_importance"]), use_container_width=True, config={"displayModeBar": False})
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    st.markdown('<div class="section">', unsafe_allow_html=True)
+    render_section_header("Soil fertility prediction", "Analyze one soil profile", "Enter the five validated features used during training.")
+    with st.form("soil-prediction-form"):
+        input_columns = st.columns(5)
+        input_values = {}
+        input_specs = [("N", 0.0, 200.0, 1.0), ("P", 0.0, 200.0, 1.0), ("K", 0.0, 250.0, 1.0), ("pH", 0.0, 14.0, 0.1), ("Organic Carbon", 0.0, 20.0, 0.1)]
+        for column, (feature, minimum, maximum, step) in zip(input_columns, input_specs):
+            with column:
+                model_column = "Organic_Carbon" if feature == "Organic Carbon" else feature
+                input_values[model_column] = st.number_input(feature, min_value=minimum, max_value=maximum, value=float(2.0 if model_column == "Organic_Carbon" else 6.5 if model_column == "pH" else 40.0), step=step, key=f"prediction-{model_column}")
+        submitted = st.form_submit_button("Analyze Soil  →", use_container_width=True)
+    if submitted:
+        try:
+            result = predict_fertility(model, input_values)
+            prediction = result["prediction"].upper()
+            st.markdown(f'<div class="about-panel"><div class="eyebrow">MODEL OUTPUT</div><div class="placeholder-title">{prediction}</div><p class="placeholder-copy">Model confidence: <strong>{result["confidence"]:.1%}</strong></p><p class="kpi-note">Prediction is based on the trained prototype model and should not replace laboratory soil testing.</p></div>', unsafe_allow_html=True)
+            st.plotly_chart(prediction_probability_figure(result["probabilities"]), use_container_width=True, config={"displayModeBar": False})
+        except (ValueError, TypeError, KeyError) as error:
+            st.error(f"The soil profile could not be analyzed: {error}")
+    st.markdown('</div>', unsafe_allow_html=True)
+
+
+def render_model_insights() -> None:
+    model, metadata, model_error = load_model_artifacts()
+    if model_error or metadata is None:
+        st.error(f"Model insights are unavailable: {model_error or 'No model metadata was returned.'}")
+        return
+    st.markdown('<div class="hero"><div class="eyebrow">✦ MODEL TRANSPARENCY</div><h1 class="placeholder-title">Understand the model behind the class.</h1><p class="placeholder-copy">A concise record of the prototype model, its evaluation context and its limits.</p><div class="status-pill">DEMO / SYNTHETIC DATASET</div></div>', unsafe_allow_html=True)
+    st.markdown('<div class="section">', unsafe_allow_html=True)
+    render_section_header("Model card", "A transparent training record")
+    detail_columns = st.columns(2)
+    with detail_columns[0]:
+        st.markdown(f'<div class="about-panel"><div class="section-label">Training contract</div><div class="placeholder-copy"><strong>Model:</strong> {metadata["model_name"]}<br><strong>Target:</strong> {metadata["target"]}<br><strong>Features:</strong> {", ".join(metadata["features"])}<br><strong>Classes:</strong> {", ".join(metadata["classes"])}<br><strong>Split:</strong> {metadata["training_samples"]} train / {metadata["testing_samples"]} test<br><strong>Random state:</strong> {metadata["random_state"]}</div></div>', unsafe_allow_html=True)
+    with detail_columns[1]:
+        st.markdown('<div class="about-panel"><div class="section-label">Limitations</div><div class="placeholder-copy">This model is trained on a small demo/synthetic dataset for prototype validation. Its metrics do not establish real-world agricultural accuracy, laboratory-level accuracy or suitability for independent field decisions. Predictions should not replace laboratory soil testing.</div></div>', unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section">', unsafe_allow_html=True)
+    render_section_header("Evaluation metrics", "The measured validation split", "Weighted metrics from the held-out test set.")
+    render_model_kpis(metadata)
+    st.plotly_chart(feature_importance_figure(metadata["feature_importance"]), use_container_width=True, config={"displayModeBar": False})
+    st.markdown('</div>', unsafe_allow_html=True)
+
+
 def render_home() -> None:
     st.markdown('<div class="hero"><div class="hero-grid"><div><div class="eyebrow">🌱 DataXcelerate 2026 · Problem Statement 22</div><h1 class="hero-title">Understand Your Soil.<br><span>Grow Smarter.</span></h1><p class="hero-copy">AI-powered soil intelligence for nutrient analysis, fertility prediction and data-driven agricultural decisions.</p></div><div class="hero-meta"><div class="hero-meta-title">The intelligence layer for modern farms</div><div class="hero-meta-value">From soil signals to smarter action.</div><div class="hero-meta-copy">A single, focused workspace for turning the hidden story beneath every field into an advantage.</div></div></div></div>', unsafe_allow_html=True)
     primary, secondary, _ = st.columns([1.15, 1.25, 5])
@@ -394,6 +513,10 @@ def main() -> None:
         render_home()
     elif page == "data-intelligence":
         render_data_intelligence()
+    elif page == "soil-health":
+        render_soil_health()
+    elif page == "model-insights":
+        render_model_insights()
     else:
         render_placeholder(page)
 
