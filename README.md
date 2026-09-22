@@ -2,7 +2,7 @@
 
 ## Intelligent Soil Health Analysis & Fertilizer Recommendation System
 
-AGROSOIL AI is a premium Streamlit product experience for **DataXcelerate 2026, PS22**. Part 5 adds transparent, category-level fertilizer guidance on top of the Part 4 nutrient analysis and alongside the Part 3 classifier.
+AGROSOIL AI is a premium Streamlit product experience for **DataXcelerate 2026, PS22**. Part 6 adds a transparent soil-report OCR layer on top of the existing Part 3–5 analysis pipeline.
 
 ### Part 1 scope
 
@@ -68,7 +68,23 @@ The Part 4 thresholds are explicitly **Demo/Prototype thresholds**. They are not
 - Smart Recommendations cards integrated into the existing Soil Health workflow
 - Explicit reasons for every recommendation and professional validation disclaimer
 
-Part 5 does not provide kg/hectare quantities, application frequency, guaranteed yield claims or universal agronomic recommendations. All output is prototype guidance and must be validated with crop, soil type, region and professional agronomic advice. Part 6 has not been started.
+Part 5 does not provide kg/hectare quantities, application frequency, guaranteed yield claims or universal agronomic recommendations. All output is prototype guidance and must be validated with crop, soil type, region and professional agronomic advice.
+
+### Part 6 completed
+
+- Reusable `modules/ocr.py` for local image OCR, embedded PDF text extraction, value parsing and validation
+- Soil Report page supporting PNG, JPG/JPEG and PDF uploads
+- Extraction of Nitrogen, Phosphorus, Potassium, pH and Organic Carbon label variants
+- Editable extracted values before analysis
+- OCR text and confidence transparency when the local engine provides it
+- Confirmed extracted values flow through the existing Nutrient Analysis, Random Forest prediction and Recommendation Engine
+- Graceful handling for unsupported files, unreadable images, missing OCR engines, scanned PDFs and incomplete reports
+
+### OCR setup and limitations
+
+Install the Python dependencies with `pip install -r requirements.txt`. Image OCR uses `pytesseract`, which also requires the **Tesseract executable** installed separately and available on `PATH`. On Windows, install Tesseract from a trusted system package or the official distribution, then restart the terminal so `tesseract --version` works. The current environment may show a clear setup warning until that executable is installed.
+
+PDF support extracts embedded text with `pypdf`. Image-only/scanned PDFs require a PDF-to-image converter plus Tesseract and are reported as unsupported when those local tools are unavailable. OCR extracts values from the laboratory report; it does not perform the soil chemical test. Always verify extracted values against the original report before using the analysis.
 
 ### Run locally
 
@@ -102,7 +118,8 @@ Then open the local URL shown by Streamlit, usually `http://localhost:8501`.
 │   ├── model.py
 │   ├── nutrient_analysis.py
 │   ├── preprocessing.py
-│   └── recommendation_engine.py
+│   ├── recommendation_engine.py
+│   └── ocr.py
 │
 └── assets/
 ```

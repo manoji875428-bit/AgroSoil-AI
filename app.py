@@ -29,6 +29,7 @@ from modules.model import (
     train_from_processed_dataset,
 )
 from modules.nutrient_analysis import analyze_all_nutrients, analyze_npk
+from modules.ocr import process_soil_report, validate_extracted_values
 from modules.recommendation_engine import generate_recommendations
 from modules.preprocessing import run_preprocessing
 
@@ -427,6 +428,69 @@ def render_recommendations(analysis: dict) -> None:
     st.markdown('</div>', unsafe_allow_html=True)
 
 
+def render_analysis_results(input_values: dict[str, float], model: object) -> None:
+    nutrient_result = analyze_all_nutrients(input_values)
+    result = predict_fertility(model, input_values)
+    prediction = result["prediction"].upper()
+    st.markdown(f'<div class="about-panel"><div class="eyebrow">MODEL OUTPUT</div><div class="placeholder-title">{prediction}</div><p class="placeholder-copy">Model confidence: <strong>{result["confidence"]:.1%}</strong></p><p class="kpi-note">Prediction is based on the trained prototype model and should not replace laboratory soil testing.</p></div>', unsafe_allow_html=True)
+    render_section_header("Nutrient intelligence", "What the input profile shows", "Transparent rule-based statuses using demo/prototype thresholds.")
+    render_nutrient_cards(nutrient_result)
+    render_nutrient_summary(nutrient_result)
+    st.markdown(f'<div class="about-panel" style="margin-top:1rem;"><div class="section-label">NPK pattern</div><div class="placeholder-copy">{analyze_npk(nutrient_result["values"])["pattern"]}.</div></div>', unsafe_allow_html=True)
+    render_recommendations(nutrient_result)
+    st.plotly_chart(prediction_probability_figure(result["probabilities"]), use_container_width=True, config={"displayModeBar": False})
+
+
+def render_soil_report() -> None:
+    st.markdown('<div class="hero"><div class="hero-grid"><div><div class="eyebrow">▣ SOIL REPORT · PART 6</div><h1 class="hero-title">Turn a report<br><span>into insight.</span></h1><p class="hero-copy">Upload a laboratory soil report, review the extracted values and send only verified measurements into the existing AgroSoil AI analysis pipeline.</p></div><div class="hero-meta"><div class="hero-meta-title">OCR transparency</div><div class="hero-meta-value">Extracted, never assumed.</div><div class="hero-meta-copy">OCR reads report text; it does not perform the soil chemical test. Verify every extracted value against the original report.</div></div></div></div>', unsafe_allow_html=True)
+    st.markdown('<div class="about-panel"><div class="section-label">Upload Soil Test Report</div><div class="placeholder-copy">Supported formats: PNG, JPG/JPEG and PDF. OCR extracted values must be manually verified before analysis.</div></div>', unsafe_allow_html=True)
+    uploaded_report = st.file_uploader("Upload report", type=["png", "jpg", "jpeg", "pdf"], label_visibility="collapsed")
+    if uploaded_report is None:
+        st.info("Choose a soil report to begin. If Tesseract is unavailable, you can still use the editable fields after a supported report is processed.")
+        return
+
+    report_result = process_soil_report(uploaded_report.name, uploaded_report.getvalue())
+    if report_result.get("error"):
+        st.warning(report_result["error"])
+    if report_result.get("text"):
+        st.text_area("OCR extracted text", report_result["text"], height=180, disabled=True)
+    else:
+        st.warning("No text was extracted. Please enter the values manually and verify them against the original report.")
+    confidence = report_result.get("confidence")
+    if confidence is not None:
+        st.caption(f"OCR average confidence: {confidence:.1f}% · Verify against the original report.")
+    else:
+        st.caption("OCR extracted — verify before analysis. Confidence information is unavailable for this report.")
+
+    extracted_values = report_result.get("values", {})
+    defaults = {"N": 0.0, "P": 0.0, "K": 0.0, "pH": 7.0, "Organic_Carbon": 0.0}
+    st.markdown('<div class="section">', unsafe_allow_html=True)
+    render_section_header("Extracted soil parameters", "Review and correct before analysis", "Missing values are shown as editable defaults and must be replaced with verified report values.")
+    with st.form("soil-report-analysis-form"):
+        input_columns = st.columns(5)
+        input_specs = [("N", "Nitrogen", 0.0, 200.0, 1.0), ("P", "Phosphorus", 0.0, 200.0, 1.0), ("K", "Potassium", 0.0, 250.0, 1.0), ("pH", "pH", 0.0, 14.0, 0.1), ("Organic_Carbon", "Organic Carbon", 0.0, 20.0, 0.1)]
+        editable_values: dict[str, float] = {}
+        for column, (field, label, minimum, maximum, step) in zip(input_columns, input_specs):
+            with column:
+                value = extracted_values.get(field)
+                editable_values[field] = st.number_input(label, min_value=minimum, max_value=maximum, value=float(value if value is not None else defaults[field]), step=step, key=f"ocr-{field}")
+        analyze_uploaded = st.form_submit_button("Analyze Extracted Soil  →", use_container_width=True)
+    st.markdown('</div>', unsafe_allow_html=True)
+    if analyze_uploaded:
+        validation = validate_extracted_values(editable_values)
+        if not validation["valid"]:
+            st.error("Please verify all extracted values before analysis.")
+            return
+        model, _, model_error = load_model_artifacts()
+        if model_error or model is None:
+            st.error(f"The fertility model is unavailable: {model_error or 'No trained model was loaded.'}")
+            return
+        try:
+            render_analysis_results(validation["values"], model)
+        except (ValueError, TypeError, KeyError, OSError) as error:
+            st.error(f"The extracted soil report could not be analyzed: {error}")
+
+
 def render_nutrient_intelligence() -> None:
     st.markdown('<div class="hero"><div class="hero-grid"><div><div class="eyebrow">◫ NUTRIENT INTELLIGENCE · PART 4</div><h1 class="hero-title">Read what is<br><span>in the soil.</span></h1><p class="hero-copy">Transparent, configurable nutrient analysis for nitrogen, phosphorus, potassium, pH and organic carbon. Every status is rule-based and explainable.</p></div><div class="hero-meta"><div class="hero-meta-title">Demo / Prototype thresholds</div><div class="hero-meta-value">Configurable by design.</div><div class="hero-meta-copy">These thresholds are placeholders for prototype validation and must be replaced with region- and crop-specific agronomic ranges for production.</div></div></div></div>', unsafe_allow_html=True)
     try:
@@ -529,16 +593,7 @@ def render_soil_health() -> None:
         submitted = st.form_submit_button("Analyze Soil  →", use_container_width=True)
     if submitted:
         try:
-            nutrient_result = analyze_all_nutrients(input_values)
-            result = predict_fertility(model, input_values)
-            prediction = result["prediction"].upper()
-            st.markdown(f'<div class="about-panel"><div class="eyebrow">MODEL OUTPUT</div><div class="placeholder-title">{prediction}</div><p class="placeholder-copy">Model confidence: <strong>{result["confidence"]:.1%}</strong></p><p class="kpi-note">Prediction is based on the trained prototype model and should not replace laboratory soil testing.</p></div>', unsafe_allow_html=True)
-            render_section_header("Nutrient intelligence", "What the input profile shows", "Transparent rule-based statuses using demo/prototype thresholds.")
-            render_nutrient_cards(nutrient_result)
-            render_nutrient_summary(nutrient_result)
-            st.markdown(f'<div class="about-panel" style="margin-top:1rem;"><div class="section-label">NPK pattern</div><div class="placeholder-copy">{analyze_npk(nutrient_result["values"])["pattern"]}. No fertilizer recommendation is generated in Part 4.</div></div>', unsafe_allow_html=True)
-            render_recommendations(nutrient_result)
-            st.plotly_chart(prediction_probability_figure(result["probabilities"]), use_container_width=True, config={"displayModeBar": False})
+            render_analysis_results(input_values, model)
         except (ValueError, TypeError, KeyError, OSError) as error:
             st.error(f"The soil profile could not be analyzed: {error}")
     st.markdown('</div>', unsafe_allow_html=True)
@@ -645,6 +700,8 @@ def main() -> None:
     page = st.session_state["page"]
     if page == "home":
         render_home()
+    elif page == "soil-report":
+        render_soil_report()
     elif page == "data-intelligence":
         render_data_intelligence()
     elif page == "nutrient-intelligence":
