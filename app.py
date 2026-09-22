@@ -11,7 +11,9 @@ from modules.analytics import (
     correlation_figure,
     confusion_matrix_figure,
     feature_importance_figure,
+    npk_comparison_figure,
     nutrient_distribution_figure,
+    nutrient_status_figure,
     prediction_probability_figure,
     regional_summary_figure,
 )
@@ -26,6 +28,7 @@ from modules.model import (
     predict_fertility,
     train_from_processed_dataset,
 )
+from modules.nutrient_analysis import analyze_all_nutrients, analyze_npk
 from modules.preprocessing import run_preprocessing
 
 
@@ -46,6 +49,7 @@ NAVIGATION = {
     ],
     "INTELLIGENCE": [
         ("◫", "Data Intelligence", "data-intelligence"),
+        ("◎", "Nutrient Intelligence", "nutrient-intelligence"),
         ("◈", "Soil Health", "soil-health"),
         ("▦", "Analytics", "analytics"),
         ("⌖", "Regional Insights", "regional-insights"),
@@ -163,6 +167,15 @@ def get_css() -> str:
     .placeholder-title { color: var(--ink); font-family: 'Manrope', sans-serif; font-size: 2rem; font-weight: 700; margin: .7rem 0 .6rem; }
     .placeholder-copy { color: var(--muted-strong); font-size: .95rem; line-height: 1.65; max-width: 680px; }
     .status-pill { color: var(--gold); display: inline-block; font-size: .68rem; font-weight: 700; letter-spacing: .11em; margin-top: 1.2rem; padding: .45rem .7rem; border: 1px solid rgba(224,180,94,.24); border-radius: 99px; text-transform: uppercase; }
+    .nutrient-card { background: linear-gradient(145deg, rgba(24, 40, 29, .8), rgba(14, 26, 19, .72)); border: 1px solid var(--line); border-radius: 16px; min-height: 145px; padding: 1.15rem; transition: all .25s ease; }
+    .nutrient-card:hover { border-color: rgba(183, 238, 101, .32); box-shadow: 0 18px 40px rgba(0,0,0,.2); transform: translateY(-4px); }
+    .nutrient-name { color: var(--muted); font-size: .68rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+    .nutrient-value { color: var(--ink); font-family: 'Manrope', sans-serif; font-size: 1.9rem; font-weight: 700; margin: .75rem 0 .5rem; }
+    .nutrient-status { border-radius: 99px; display: inline-block; font-size: .68rem; font-weight: 700; letter-spacing: .1em; padding: .35rem .6rem; text-transform: uppercase; }
+    .nutrient-status.low, .nutrient-status.acidic { background: rgba(216, 137, 98, .14); color: #e6a482; }
+    .nutrient-status.adequate, .nutrient-status.suitable { background: rgba(183, 238, 101, .12); color: var(--lime); }
+    .nutrient-status.high, .nutrient-status.alkaline { background: rgba(224, 180, 94, .14); color: var(--gold); }
+    .nutrient-message { color: var(--muted); font-size: .75rem; line-height: 1.45; margin-top: .7rem; }
     @keyframes rise { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
     @media (max-width: 900px) { .block-container { padding: 1.5rem 1.25rem 3rem; } .hero-grid { grid-template-columns: 1fr; } .hero-meta { border-left: 0; border-top: 1px solid var(--line); padding: 1.2rem 0 0; } .workflow { flex-wrap: wrap; } .workflow-card { flex: 1 1 30%; min-width: 130px; } .workflow-card::after { display: none; } }
     @media (max-width: 600px) { .hero-title { font-size: 3.1rem; } .section-head { align-items: start; flex-direction: column; gap: .4rem; } .workflow-card { flex-basis: 45%; } }
@@ -350,6 +363,83 @@ def render_model_kpis(metadata: dict) -> None:
             render_kpi_card(label, f"{float(value):.1%}", note, accent)
 
 
+def render_nutrient_cards(analysis: dict) -> None:
+    nutrient_columns = st.columns(5)
+    for column, result in zip(nutrient_columns, analysis["nutrients"]):
+        status_class = str(result["status"]).lower()
+        value = f'{float(result["value"]):.2f}'
+        with column:
+            st.markdown(
+                f'<div class="nutrient-card"><div class="nutrient-name">{result["nutrient"]}</div><div class="nutrient-value">{value}</div><div class="nutrient-status {status_class}">{result["status"]}</div><div class="nutrient-message">{result["message"]}</div></div>',
+                unsafe_allow_html=True,
+            )
+
+
+def render_nutrient_summary(analysis: dict) -> None:
+    summary = analysis["summary"]
+    summary_columns = st.columns(4)
+    summary_items = [
+        ("NPK TOTAL", f'{analysis["npk_total"]:.2f}', "N + P + K", True),
+        ("LOW NUTRIENTS", str(summary["low_nutrients"]), "Rule-based flags", False),
+        ("ADEQUATE / SUITABLE", str(summary["adequate_nutrients"]), "Rule-based status", False),
+        ("OVERALL CONDITION", summary["overall_condition"], "Descriptive only", False),
+    ]
+    for column, (label, value, note, accent) in zip(summary_columns, summary_items):
+        with column:
+            render_kpi_card(label, value, note, accent)
+
+
+def render_nutrient_intelligence() -> None:
+    st.markdown('<div class="hero"><div class="hero-grid"><div><div class="eyebrow">◫ NUTRIENT INTELLIGENCE · PART 4</div><h1 class="hero-title">Read what is<br><span>in the soil.</span></h1><p class="hero-copy">Transparent, configurable nutrient analysis for nitrogen, phosphorus, potassium, pH and organic carbon. Every status is rule-based and explainable.</p></div><div class="hero-meta"><div class="hero-meta-title">Demo / Prototype thresholds</div><div class="hero-meta-value">Configurable by design.</div><div class="hero-meta-copy">These thresholds are placeholders for prototype validation and must be replaced with region- and crop-specific agronomic ranges for production.</div></div></div></div>', unsafe_allow_html=True)
+    try:
+        processed_dataframe = pd.read_csv(default_processed_path())
+        required_columns = ["N", "P", "K", "pH", "Organic_Carbon"]
+        missing_columns = [column for column in required_columns if column not in processed_dataframe.columns]
+        if processed_dataframe.empty:
+            st.error("The processed dataset is empty. Nutrient analysis cannot continue.")
+            return
+        if missing_columns:
+            st.error(f"The processed dataset is missing required nutrient columns: {', '.join(missing_columns)}")
+            return
+        mean_values = processed_dataframe[required_columns].apply(pd.to_numeric, errors="coerce").mean().to_dict()
+        if any(pd.isna(value) for value in mean_values.values()):
+            st.error("The processed dataset contains unavailable nutrient values for analysis.")
+            return
+        analysis = analyze_all_nutrients(mean_values)
+    except (OSError, ValueError, TypeError) as error:
+        st.error(f"Nutrient analysis is unavailable: {error}")
+        return
+
+    st.markdown('<div class="section">', unsafe_allow_html=True)
+    render_section_header("Dataset nutrient profile", "A transparent read of the processed dataset", "Values below are means from the Part 2 processed dataset, not a prediction or recommendation.")
+    render_nutrient_cards(analysis)
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    st.markdown('<div class="section">', unsafe_allow_html=True)
+    render_section_header("NPK analysis", "See the balance at a glance", "NPK total and deficiency patterns are descriptive rule-based signals only.")
+    render_nutrient_summary(analysis)
+    npk_analysis = analyze_npk(analysis["values"])
+    st.markdown(f'<div class="about-panel" style="margin-top:1rem;"><div class="section-label">NPK pattern</div><div class="placeholder-copy">{npk_analysis["pattern"]}. No fertilizer recommendation is generated in Part 4.</div></div>', unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    st.markdown('<div class="section">', unsafe_allow_html=True)
+    render_section_header("Visual analytics", "Compare the nutrient signals", "Interactive charts use real processed-dataset means and status results.")
+    chart_columns = st.columns(2)
+    with chart_columns[0]:
+        st.plotly_chart(npk_comparison_figure(analysis["values"]), use_container_width=True, config={"displayModeBar": False})
+    with chart_columns[1]:
+        st.plotly_chart(nutrient_status_figure(analysis["nutrients"]), use_container_width=True, config={"displayModeBar": False})
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    st.markdown('<div class="section">', unsafe_allow_html=True)
+    render_section_header("Threshold note", "Designed to be replaced", "Demo/prototype thresholds are centralized in modules/nutrient_analysis.py so validated agronomic interpretation ranges can be introduced later.")
+    distribution_columns = st.columns(5)
+    for column, feature in zip(distribution_columns, required_columns):
+        with column:
+            st.plotly_chart(nutrient_distribution_figure(processed_dataframe, feature), use_container_width=True, config={"displayModeBar": False})
+    st.markdown('</div>', unsafe_allow_html=True)
+
+
 def render_soil_health() -> None:
     st.markdown('<div class="hero"><div class="hero-grid"><div><div class="eyebrow">◈ SOIL HEALTH · PART 3</div><h1 class="hero-title">From soil signals<br><span>to a class.</span></h1><p class="hero-copy">A supervised Random Forest prototype that classifies fertility from validated soil measurements. Inspect the model, then test one soil profile.</p></div><div class="hero-meta"><div class="hero-meta-title">Prototype model</div><div class="hero-meta-value">Random Forest Classifier</div><div class="hero-meta-copy">Trained using demo/synthetic data for prototype validation. This output does not replace laboratory soil testing.</div></div></div></div>', unsafe_allow_html=True)
     model, metadata, model_error = load_model_artifacts()
@@ -401,11 +491,16 @@ def render_soil_health() -> None:
         submitted = st.form_submit_button("Analyze Soil  →", use_container_width=True)
     if submitted:
         try:
+            nutrient_result = analyze_all_nutrients(input_values)
             result = predict_fertility(model, input_values)
             prediction = result["prediction"].upper()
             st.markdown(f'<div class="about-panel"><div class="eyebrow">MODEL OUTPUT</div><div class="placeholder-title">{prediction}</div><p class="placeholder-copy">Model confidence: <strong>{result["confidence"]:.1%}</strong></p><p class="kpi-note">Prediction is based on the trained prototype model and should not replace laboratory soil testing.</p></div>', unsafe_allow_html=True)
+            render_section_header("Nutrient intelligence", "What the input profile shows", "Transparent rule-based statuses using demo/prototype thresholds.")
+            render_nutrient_cards(nutrient_result)
+            render_nutrient_summary(nutrient_result)
+            st.markdown(f'<div class="about-panel" style="margin-top:1rem;"><div class="section-label">NPK pattern</div><div class="placeholder-copy">{analyze_npk(nutrient_result["values"])["pattern"]}. No fertilizer recommendation is generated in Part 4.</div></div>', unsafe_allow_html=True)
             st.plotly_chart(prediction_probability_figure(result["probabilities"]), use_container_width=True, config={"displayModeBar": False})
-        except (ValueError, TypeError, KeyError) as error:
+        except (ValueError, TypeError, KeyError, OSError) as error:
             st.error(f"The soil profile could not be analyzed: {error}")
     st.markdown('</div>', unsafe_allow_html=True)
 
@@ -513,6 +608,8 @@ def main() -> None:
         render_home()
     elif page == "data-intelligence":
         render_data_intelligence()
+    elif page == "nutrient-intelligence":
+        render_nutrient_intelligence()
     elif page == "soil-health":
         render_soil_health()
     elif page == "model-insights":

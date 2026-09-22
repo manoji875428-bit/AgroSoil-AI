@@ -2,7 +2,7 @@
 
 ## Intelligent Soil Health Analysis & Fertilizer Recommendation System
 
-AGROSOIL AI is a premium Streamlit product experience for **DataXcelerate 2026, PS22**. Part 3 adds a supervised Random Forest prototype for soil fertility classification on top of the transparent Part 2 data foundation.
+AGROSOIL AI is a premium Streamlit product experience for **DataXcelerate 2026, PS22**. Part 4 adds transparent, configurable nutrient status analysis on top of the Part 2 data foundation and alongside the Part 3 classifier.
 
 ### Part 1 scope
 
@@ -43,6 +43,19 @@ The demo CSV is synthetic development data. It does not represent real agricultu
 - Probability output labelled as model confidence, not certainty
 
 The prototype uses only `N`, `P`, `K`, `pH` and `Organic_Carbon` as model inputs. `NPK_Total` is retained in the processed dataset for later analysis but is excluded from the classifier to avoid redundant inputs. The model is trained using demo/synthetic data for prototype validation. Its evaluation does not establish real-world agricultural or laboratory-level accuracy, and predictions should not replace laboratory soil testing.
+
+### Part 4 completed
+
+- Centralized demo/prototype thresholds in `modules/nutrient_analysis.py`
+- Validation for missing, non-numeric, negative nutrient, non-finite and impossible pH inputs
+- Rule-based status analysis for Nitrogen, Phosphorus, Potassium, pH and Organic Carbon
+- NPK total and descriptive deficiency-pattern detection
+- Descriptive nutrient summary without inventing a 0-100 soil health score
+- Nutrient Intelligence page using real processed-dataset means
+- NPK comparison, status overview and nutrient distribution Plotly charts
+- Soil Health form integration that displays nutrient analysis alongside the unchanged ML prediction
+
+The Part 4 thresholds are explicitly **Demo/Prototype thresholds**. They are not universal agronomic facts and must be replaced with region- and crop-specific ranges validated by qualified agronomists and soil laboratories before production use. Part 4 does not generate fertilizer recommendations.
 
 ### Run locally
 

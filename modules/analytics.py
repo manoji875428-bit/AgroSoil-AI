@@ -122,3 +122,33 @@ def prediction_probability_figure(probabilities: dict[str, float]) -> go.Figure:
     figure.update_yaxes(range=[0, 1], tickformat=".0%")
     figure.update_traces(hovertemplate="%{x}: %{y:.1%}<extra></extra>")
     return _figure_layout(figure)
+
+
+def npk_comparison_figure(values: dict[str, float]) -> go.Figure:
+    nutrient_frame = pd.DataFrame({"Nutrient": ["N", "P", "K"], "Value": [values["N"], values["P"], values["K"]]})
+    figure = px.bar(
+        nutrient_frame,
+        x="Nutrient",
+        y="Value",
+        title="NPK comparison",
+        color="Nutrient",
+        color_discrete_map={"N": "#b7ee65", "P": "#e0b45e", "K": "#4da778"},
+    )
+    return _figure_layout(figure)
+
+
+def nutrient_status_figure(analyses: list[dict[str, object]]) -> go.Figure:
+    status_frame = pd.DataFrame(
+        {"Nutrient": [str(item["nutrient"]) for item in analyses], "Status": [str(item["status"]) for item in analyses]}
+    )
+    figure = px.bar(
+        status_frame,
+        x="Nutrient",
+        y=[1] * len(status_frame),
+        title="Nutrient status overview",
+        color="Status",
+        color_discrete_map={"Low": "#d88962", "Adequate": "#b7ee65", "Suitable": "#b7ee65", "High": "#e0b45e", "Acidic": "#d88962", "Alkaline": "#e0b45e"},
+    )
+    figure.update_yaxes(visible=False, range=[0, 1.25])
+    figure.update_traces(hovertemplate="%{x}: %{marker.color}<extra></extra>")
+    return _figure_layout(figure)
