@@ -32,6 +32,15 @@ from modules.analytics import (
 )
 from modules.data_loader import get_dataset_summary, load_raw_dataset, validate_dataset
 from modules.data_utils import NUMERIC_FEATURES, TARGET_COLUMN, default_processed_path, default_raw_path
+from modules.database import (
+    DATABASE_PATH,
+    clear_analysis_history,
+    delete_analysis,
+    get_analysis_by_id,
+    get_analysis_history,
+    init_database,
+    save_analysis,
+)
 from modules.farmer_assessment import (
     analyze_farmer_observations,
     generate_farmer_summary,
@@ -53,6 +62,9 @@ from modules.recommendation_engine import generate_recommendations
 from modules.preprocessing import run_preprocessing
 from modules.soil_image import generate_visual_assessment
 from modules.what_if import derive_input_ranges, run_what_if_simulation
+
+
+init_database()
 
 
 st.set_page_config(
@@ -468,9 +480,41 @@ def render_recommendations(analysis: dict) -> None:
     st.markdown('</div>', unsafe_allow_html=True)
 
 
-def render_analysis_results(input_values: dict[str, float], model: object) -> None:
+def render_history_save_control(payload: dict) -> None:
+    st.markdown('<div class="about-panel"><div class="section-label">Analysis History</div><div class="placeholder-copy">Analysis history is stored locally in the AgroSoil AI SQLite database.</div></div>', unsafe_allow_html=True)
+    if st.button("Save this analysis to history", key=f"save-history-{payload['input_mode']}", use_container_width=False):
+        try:
+            saved = save_analysis(
+                input_mode=payload["input_mode"],
+                nitrogen=payload["input_values"].get("N"),
+                phosphorus=payload["input_values"].get("P"),
+                potassium=payload["input_values"].get("K"),
+                ph=payload["input_values"].get("pH"),
+                organic_carbon=payload["input_values"].get("Organic_Carbon"),
+                predicted_fertility=payload["prediction"],
+                model_confidence=payload["confidence"],
+                recommendation_summary=payload["recommendation_summary"],
+                source_file=payload.get("source_file"),
+            )
+            st.session_state["last_history_save"] = "Analysis saved to local history." if saved["inserted"] else "This analysis is already in local history."
+        except (OSError, ValueError, TypeError) as error:
+            st.error(f"Could not save analysis history: {error}")
+    if st.session_state.get("last_history_save"):
+        st.success(st.session_state["last_history_save"])
+
+
+def render_analysis_results(input_values: dict[str, float], model: object, input_mode: str = "Manual Soil Analysis", source_file: str | None = None) -> None:
     nutrient_result = analyze_all_nutrients(input_values)
     result = predict_fertility(model, input_values)
+    recommendation_output = generate_recommendations(nutrient_result)
+    st.session_state["last_analysis_payload"] = {
+        "input_mode": input_mode,
+        "input_values": input_values,
+        "prediction": result["prediction"],
+        "confidence": result["confidence"],
+        "recommendation_summary": " | ".join(recommendation_output["summary"]["summary_lines"]),
+        "source_file": source_file,
+    }
     prediction = result["prediction"].upper()
     st.markdown(f'<div class="about-panel"><div class="eyebrow">MODEL OUTPUT</div><div class="placeholder-title">{prediction}</div><p class="placeholder-copy">Model confidence: <strong>{result["confidence"]:.1%}</strong></p><p class="kpi-note">Prediction is based on the trained prototype model and should not replace laboratory soil testing.</p></div>', unsafe_allow_html=True)
     render_section_header("Nutrient intelligence", "What the input profile shows", "Transparent rule-based statuses using demo/prototype thresholds.")
@@ -479,6 +523,7 @@ def render_analysis_results(input_values: dict[str, float], model: object) -> No
     st.markdown(f'<div class="about-panel" style="margin-top:1rem;"><div class="section-label">NPK pattern</div><div class="placeholder-copy">{analyze_npk(nutrient_result["values"])["pattern"]}.</div></div>', unsafe_allow_html=True)
     render_recommendations(nutrient_result)
     st.plotly_chart(prediction_probability_figure(result["probabilities"]), use_container_width=True, config={"displayModeBar": False})
+    render_history_save_control(st.session_state["last_analysis_payload"])
 
 
 def render_soil_report() -> None:
@@ -526,9 +571,13 @@ def render_soil_report() -> None:
             st.error(f"The fertility model is unavailable: {model_error or 'No trained model was loaded.'}")
             return
         try:
-            render_analysis_results(validation["values"], model)
+            render_analysis_results(validation["values"], model, input_mode="Soil Report OCR", source_file=uploaded_report.name)
         except (ValueError, TypeError, KeyError, OSError) as error:
             st.error(f"The extracted soil report could not be analyzed: {error}")
+    elif st.session_state.get("last_analysis_payload", {}).get("input_mode") == "Soil Report OCR":
+        model, _, model_error = load_model_artifacts()
+        if model is not None and not model_error:
+            render_analysis_results(st.session_state["last_analysis_payload"]["input_values"], model, input_mode="Soil Report OCR", source_file=st.session_state["last_analysis_payload"].get("source_file"))
 
 
 def render_soil_image() -> None:
@@ -857,9 +906,11 @@ def render_soil_health() -> None:
         submitted = st.form_submit_button("Analyze Soil  →", use_container_width=True)
     if submitted:
         try:
-            render_analysis_results(input_values, model)
+            render_analysis_results(input_values, model, input_mode="Manual Soil Analysis")
         except (ValueError, TypeError, KeyError, OSError) as error:
             st.error(f"The soil profile could not be analyzed: {error}")
+    elif st.session_state.get("last_analysis_payload", {}).get("input_mode") == "Manual Soil Analysis":
+        render_analysis_results(st.session_state["last_analysis_payload"]["input_values"], model, input_mode="Manual Soil Analysis")
     st.markdown('</div>', unsafe_allow_html=True)
 
 
@@ -1015,6 +1066,60 @@ def render_analytics_dashboard(regional_only: bool = False) -> None:
         st.dataframe(filtered[visible_columns], use_container_width=True, hide_index=True)
 
 
+def render_analysis_history() -> None:
+    st.markdown('<div class="hero"><div class="hero-grid"><div><div class="eyebrow">▤ SYSTEM · PART 11</div><h1 class="hero-title">Your analysis<br><span>trail.</span></h1><p class="hero-copy">Review completed soil analyses saved locally from the AgroSoil AI workflows.</p></div><div class="hero-meta"><div class="hero-meta-title">Local persistence</div><div class="hero-meta-value">SQLite · on this machine</div><div class="hero-meta-copy">Analysis history is stored locally in the AgroSoil AI SQLite database. No cloud synchronization is used.</div></div></div></div>', unsafe_allow_html=True)
+    try:
+        history = get_analysis_history()
+    except (OSError, ValueError, TypeError) as error:
+        st.error(f"Analysis history is unavailable: {error}")
+        return
+    total = len(history)
+    latest = history[0]["created_at"] if history else "--"
+    report_count = sum(item["input_mode"] == "Soil Report OCR" for item in history)
+    manual_count = sum(item["input_mode"] in {"Manual Soil Analysis", "Manual numeric analysis"} for item in history)
+    st.markdown('<div class="section">', unsafe_allow_html=True)
+    render_section_header("History overview", "Completed analyses, kept close", "Only analyses explicitly saved by the user appear here.")
+    kpis = [("TOTAL ANALYSES", str(total), "Saved records", True), ("LATEST ANALYSIS", latest.replace("T", " ") if latest != "--" else "--", "UTC timestamp", False), ("SOIL REPORT", str(report_count), "OCR-based records", False), ("MANUAL / NUMERIC", str(manual_count), "Verified numeric records", False)]
+    for start in range(0, len(kpis), 2):
+        columns = st.columns(2)
+        for column, (label, value, note, accent) in zip(columns, kpis[start:start + 2]):
+            with column:
+                render_kpi_card(label, value, note, accent)
+    st.markdown('</div>', unsafe_allow_html=True)
+    if not history:
+        st.info("No saved analyses yet. Complete a Soil Health or Soil Report analysis, then choose Save this analysis to history.")
+        return
+
+    st.markdown('<div class="section">', unsafe_allow_html=True)
+    render_section_header("Analysis history", "Your saved records", "Select a record to inspect the stored result.")
+    table = pd.DataFrame(history)
+    table["Date"] = table["created_at"].str.replace("T", " ", regex=False)
+    table["Confidence"] = table["model_confidence"].map(lambda value: f"{value:.1%}" if pd.notna(value) else "--")
+    table = table.rename(columns={"input_mode": "Input Mode", "region": "Region", "crop": "Crop", "nitrogen": "N", "phosphorus": "P", "potassium": "K", "ph": "pH", "organic_carbon": "Organic Carbon", "predicted_fertility": "Fertility"})
+    display_columns = ["id", "Date", "Input Mode", "Region", "Crop", "N", "P", "K", "pH", "Organic Carbon", "Fertility", "Confidence"]
+    st.dataframe(table[display_columns].rename(columns={"id": "ID"}), use_container_width=True, hide_index=True)
+    selected_id = st.selectbox("Select analysis", [item["id"] for item in history], format_func=lambda identifier: f"Analysis #{identifier} · {next(item['input_mode'] for item in history if item['id'] == identifier)}", key="history-selected-id")
+    selected = get_analysis_by_id(selected_id)
+    if selected:
+        confidence_text = f'{selected["model_confidence"]:.1%}' if selected["model_confidence"] is not None else "--"
+        detail_markup = f'<strong>Analysis ID:</strong> {selected["id"]}<br><strong>Date/time:</strong> {selected["created_at"]}<br><strong>Input source:</strong> {selected["input_mode"]}<br><strong>N / P / K:</strong> {selected["nitrogen"] if selected["nitrogen"] is not None else "--"} / {selected["phosphorus"] if selected["phosphorus"] is not None else "--"} / {selected["potassium"] if selected["potassium"] is not None else "--"}<br><strong>pH:</strong> {selected["ph"] if selected["ph"] is not None else "--"}<br><strong>Organic Carbon:</strong> {selected["organic_carbon"] if selected["organic_carbon"] is not None else "--"}<br><strong>Predicted fertility:</strong> {selected["predicted_fertility"] or "--"}<br><strong>Model confidence:</strong> {confidence_text}<br><strong>Recommendation summary:</strong> {selected["recommendation_summary"] or "--"}<br><strong>Source file:</strong> {selected["source_file"] or "--"}'
+        st.markdown(f'<div class="about-panel"><div class="section-label">Analysis details</div><div class="placeholder-copy">{detail_markup}</div></div>', unsafe_allow_html=True)
+    controls = st.columns(2)
+    with controls[0]:
+        confirm_delete = st.checkbox("I understand this deletes the selected record", key="confirm-delete-history")
+        if st.button("Delete selected analysis", disabled=not confirm_delete, key="delete-selected-history"):
+            delete_analysis(selected_id)
+            st.success("Selected analysis deleted.")
+            st.rerun()
+    with controls[1]:
+        confirm_clear = st.checkbox("I understand this clears all saved history", key="confirm-clear-history")
+        if st.button("Clear all history", disabled=not confirm_clear, key="clear-all-history"):
+            clear_analysis_history()
+            st.success("Analysis history cleared.")
+            st.rerun()
+    st.markdown('</div>', unsafe_allow_html=True)
+
+
 def render_home() -> None:
     st.markdown('<div class="hero"><div class="hero-grid"><div><div class="eyebrow">🌱 DataXcelerate 2026 · Problem Statement 22</div><h1 class="hero-title">Understand Your Soil.<br><span>Grow Smarter.</span></h1><p class="hero-copy">AI-powered soil intelligence for nutrient analysis, fertility prediction and data-driven agricultural decisions.</p></div><div class="hero-meta"><div class="hero-meta-title">The intelligence layer for modern farms</div><div class="hero-meta-value">From soil signals to smarter action.</div><div class="hero-meta-copy">A single, focused workspace for turning the hidden story beneath every field into an advantage.</div></div></div></div>', unsafe_allow_html=True)
     primary, secondary, _ = st.columns([1.15, 1.25, 5])
@@ -1107,6 +1212,8 @@ def main() -> None:
         render_analytics_dashboard()
     elif page == "regional-insights":
         render_analytics_dashboard(regional_only=True)
+    elif page == "history":
+        render_analysis_history()
     elif page == "data-intelligence":
         render_data_intelligence()
     elif page == "nutrient-intelligence":

@@ -2,7 +2,7 @@
 
 ## Intelligent Soil Health Analysis & Fertilizer Recommendation System
 
-AGROSOIL AI is a premium Streamlit product experience for **DataXcelerate 2026, PS22**. Part 10 adds an interactive analytics and regional-insights layer over the actual processed soil dataset.
+AGROSOIL AI is a premium Streamlit product experience for **DataXcelerate 2026, PS22**. Part 11 adds local SQLite persistence for completed soil analyses and an Analysis History workspace.
 
 ### Part 1 scope
 
@@ -140,6 +140,18 @@ The simulator changes model inputs only. It does not calculate fertilizer dosage
 
 Part 10 uses `data/processed/soil_processed.csv` only. It does not fabricate regions, crops, coordinates, measurements, fertility labels or deficiency statistics. The current dataset is a small demo/synthetic dataset; the dashboard structure is designed to scale to larger or distributed processing later, but it does not claim Spark/Hadoop execution.
 
+### Part 11 completed
+
+- Local SQLite database at `data/agrosoil.db`
+- Reusable `modules/database.py` with initialization, save, retrieval, detail, delete and clear operations
+- Parameterized SQL and duplicate-save protection using a record fingerprint
+- Explicit Save to History control for completed manual and Soil Report OCR analyses
+- Analysis History page with totals, latest timestamp, input-mode counts, table view and details
+- Confirmation-gated delete and clear-history controls
+- Nullable support for unavailable region, crop, source file and nutrient fields
+
+Analysis history is stored locally in the AgroSoil AI SQLite database. No cloud storage or remote synchronization is claimed. Records are never inserted automatically from sample data, image observations, farmer observations or incomplete submissions.
+
 ### Run locally
 
 ```bash
@@ -160,6 +172,7 @@ Then open the local URL shown by Streamlit, usually `http://localhost:8501`.
 ├── README.md
 ├── .gitignore
 ├── data/
+│   ├── agrosoil.db
 │   ├── raw/
 │   └── processed/
 ├── models/
