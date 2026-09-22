@@ -19,6 +19,12 @@ from modules.analytics import (
 )
 from modules.data_loader import get_dataset_summary, load_raw_dataset, validate_dataset
 from modules.data_utils import NUMERIC_FEATURES, TARGET_COLUMN, default_processed_path, default_raw_path
+from modules.farmer_assessment import (
+    analyze_farmer_observations,
+    generate_farmer_summary,
+    generate_follow_up_guidance,
+    validate_farmer_inputs,
+)
 from modules.model import (
     MODEL_METADATA_PATH,
     MODEL_NAME,
@@ -195,6 +201,12 @@ def get_css() -> str:
     .visual-label { color: var(--muted); font-size: .68rem; font-weight: 700; letter-spacing: .11em; text-transform: uppercase; }
     .visual-value { color: var(--ink); font-family: 'Manrope', sans-serif; font-size: 1.3rem; font-weight: 700; margin: .85rem 0 .5rem; }
     .visual-copy { color: var(--muted); font-size: .78rem; line-height: 1.5; }
+    .observation-card { background: linear-gradient(145deg, rgba(24, 40, 29, .8), rgba(14, 26, 19, .72)); border: 1px solid var(--line); border-radius: 14px; min-height: 112px; padding: 1.1rem 1.2rem; }
+    .observation-label { color: var(--muted); font-size: .67rem; font-weight: 700; letter-spacing: .11em; text-transform: uppercase; }
+    .observation-value { color: var(--ink); font-family: 'Manrope', sans-serif; font-size: 1.08rem; font-weight: 700; line-height: 1.25; margin-top: .7rem; }
+    .concern-card { background: linear-gradient(145deg, rgba(65, 48, 32, .38), rgba(20, 29, 22, .72)); border: 1px solid rgba(224, 180, 94, .2); border-left: 3px solid var(--gold); border-radius: 12px; margin-bottom: .7rem; padding: 1rem 1.15rem; }
+    .concern-title { color: var(--gold); font-weight: 700; }
+    .concern-copy { color: var(--muted-strong); font-size: .82rem; line-height: 1.5; margin-top: .35rem; }
     @keyframes rise { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
     @media (max-width: 900px) { .block-container { padding: 1.5rem 1.25rem 3rem; } .hero-grid { grid-template-columns: 1fr; } .hero-meta { border-left: 0; border-top: 1px solid var(--line); padding: 1.2rem 0 0; } .workflow { flex-wrap: wrap; } .workflow-card { flex: 1 1 30%; min-width: 130px; } .workflow-card::after { display: none; } }
     @media (max-width: 600px) { .hero-title { font-size: 3.1rem; } .section-head { align-items: start; flex-direction: column; gap: .4rem; } .workflow-card { flex-basis: 45%; } }
@@ -538,6 +550,105 @@ def render_soil_image() -> None:
     st.markdown('</div>', unsafe_allow_html=True)
 
 
+def render_farmer_experience() -> None:
+    st.markdown('<div class="hero"><div class="hero-grid"><div><div class="eyebrow">♧ FARMER EXPERIENCE · PART 8</div><h1 class="hero-title">Your field<br><span>has a story.</span></h1><p class="hero-copy">Capture what you see, feel and remember about the field. We turn those observations into a structured preliminary assessment without inventing laboratory measurements.</p></div><div class="hero-meta"><div class="hero-meta-title">Observation-based assessment</div><div class="hero-meta-value">No chemical guesses.</div><div class="hero-meta-copy">Farmer observations cannot directly determine exact N, P, K, pH or Organic Carbon values.</div></div></div></div>', unsafe_allow_html=True)
+    st.info("Farmer Experience Mode provides an observation-based preliminary assessment. It does not replace laboratory soil testing and does not directly measure soil nutrients.")
+    with st.form("farmer-experience-form"):
+        st.markdown('<div class="section-label">🌱 Soil & Field</div>', unsafe_allow_html=True)
+        soil_columns = st.columns(2)
+        with soil_columns[0]:
+            soil_color = st.selectbox("1. Soil colour", ["Dark brown", "Brown", "Light brown", "Reddish", "Grayish", "Not sure"], key="farmer-soil-color")
+        with soil_columns[1]:
+            overall_condition = st.selectbox("9. Overall soil condition", ["Poor", "Fair", "Good", "Very good", "Not sure"], key="farmer-overall-condition")
+
+        st.markdown('<div class="section-label" style="margin-top:1.5rem;">🌦️ Moisture & Water</div>', unsafe_allow_html=True)
+        moisture_columns = st.columns(2)
+        with moisture_columns[0]:
+            moisture_appearance = st.selectbox("2. Current soil moisture appearance", ["Dry", "Slightly moist", "Moderately moist", "Very wet", "Not sure"], key="farmer-moisture")
+        with moisture_columns[1]:
+            water_retention = st.selectbox("7. Water retention", ["Drains quickly", "Moderate", "Retains water for long", "Not sure"], key="farmer-water-retention")
+
+        st.markdown('<div class="section-label" style="margin-top:1.5rem;">🌾 Crop History</div>', unsafe_allow_html=True)
+        crop_columns = st.columns(3)
+        with crop_columns[0]:
+            previous_crop = st.selectbox("3. Previous crop", ["Rice", "Maize", "Groundnut", "Cotton", "Vegetable", "Other"], key="farmer-previous-crop")
+        with crop_columns[1]:
+            previous_growth = st.selectbox("4. Previous crop growth", ["Poor", "Average", "Good", "Excellent", "Not sure"], key="farmer-previous-growth")
+        with crop_columns[2]:
+            previous_yield = st.selectbox("5. Previous crop yield", ["Low", "Average", "Good", "Not sure"], key="farmer-previous-yield")
+
+        st.markdown('<div class="section-label" style="margin-top:1.5rem;">🔎 Visible Problems</div>', unsafe_allow_html=True)
+        visible_problems = st.multiselect("6. Visible plant/soil problems", ["Yellowing leaves", "Poor growth", "Leaf spots", "Wilting", "Stunted growth", "No visible problem", "Not sure"], default=["No visible problem"], key="farmer-visible-problems")
+        fertilizer_usage = st.selectbox("8. Previous fertilizer usage", ["Mostly organic", "Mostly chemical fertilizer", "Both", "None", "Not sure"], key="farmer-fertilizer-usage")
+
+        st.markdown('<div class="section-label" style="margin-top:1.5rem;">📝 Additional Notes</div>', unsafe_allow_html=True)
+        farmer_notes = st.text_area("10. Optional farmer notes", placeholder="Describe anything else you have noticed in the field...", max_chars=2000, key="farmer-notes")
+        submitted = st.form_submit_button("Generate Field Assessment  →", use_container_width=True)
+
+    if not submitted:
+        return
+    values = {
+        "soil_color": soil_color,
+        "moisture_appearance": moisture_appearance,
+        "previous_crop": previous_crop,
+        "previous_growth": previous_growth,
+        "previous_yield": previous_yield,
+        "visible_problems": visible_problems,
+        "water_retention": water_retention,
+        "fertilizer_usage": fertilizer_usage,
+        "overall_condition": overall_condition,
+        "farmer_notes": farmer_notes,
+    }
+    validation = validate_farmer_inputs(values)
+    if not validation["valid"]:
+        st.error(f"Please complete the required observations: {', '.join(validation['missing'] + validation['invalid'])}")
+        return
+    try:
+        assessment = analyze_farmer_observations(values)
+        summary = generate_farmer_summary(assessment)
+    except ValueError as error:
+        st.error(str(error))
+        return
+
+    st.markdown('<div class="section">', unsafe_allow_html=True)
+    render_section_header("Field Observation Summary", "What the field is telling you", "A structured reading of your observations, not a laboratory diagnosis.")
+    summary_items = [
+        ("SOIL APPEARANCE", summary["soil_appearance"]),
+        ("MOISTURE", summary["moisture"]),
+        ("PREVIOUS CROP", summary["previous_crop"]),
+        ("CROP PERFORMANCE", summary["previous_crop_performance"]),
+        ("VISIBLE PROBLEMS", summary["visible_problems"]),
+        ("WATER RETENTION", summary["water_retention"]),
+        ("OVERALL CONDITION", summary["overall_condition"]),
+        ("FARMER NOTES", values["farmer_notes"] or "No additional notes provided."),
+    ]
+    for row_start in range(0, len(summary_items), 4):
+        summary_columns = st.columns(4)
+        for column, (label, value) in zip(summary_columns, summary_items[row_start:row_start + 4]):
+            with column:
+                st.markdown(f'<div class="observation-card"><div class="observation-label">{label}</div><div class="observation-value">{value}</div></div>', unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    st.markdown('<div class="section">', unsafe_allow_html=True)
+    render_section_header("Preliminary assessment", "Patterns worth investigating", "The wording stays observational: further soil testing is recommended where concerns appear.")
+    if assessment["concerns"]:
+        for concern in assessment["concerns"]:
+            st.markdown(f'<div class="concern-card"><div class="concern-title">{concern["issue"]}</div><div class="concern-copy">{concern["reason"]}</div></div>', unsafe_allow_html=True)
+    else:
+        st.success("No major observation-based concern was flagged.")
+    st.markdown(f'<div class="about-panel"><div class="section-label">Overall observation</div><div class="placeholder-copy">{summary["overall_observation"]}</div></div>', unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    st.markdown('<div class="section">', unsafe_allow_html=True)
+    render_section_header("Follow-up actions", "Build confidence with better evidence", "These next steps keep observation separate from measurement.")
+    for guidance in generate_follow_up_guidance(assessment):
+        st.markdown(f'<div class="about-panel" style="margin-bottom:.65rem; padding:1rem 1.2rem;"><div class="placeholder-copy">→ {guidance}</div></div>', unsafe_allow_html=True)
+    if st.button("Continue with Soil Health Analysis  →", key="farmer-continue-soil-health", use_container_width=False):
+        go_to("soil-health")
+        st.rerun()
+    st.markdown('</div>', unsafe_allow_html=True)
+
+
 def render_nutrient_intelligence() -> None:
     st.markdown('<div class="hero"><div class="hero-grid"><div><div class="eyebrow">◫ NUTRIENT INTELLIGENCE · PART 4</div><h1 class="hero-title">Read what is<br><span>in the soil.</span></h1><p class="hero-copy">Transparent, configurable nutrient analysis for nitrogen, phosphorus, potassium, pH and organic carbon. Every status is rule-based and explainable.</p></div><div class="hero-meta"><div class="hero-meta-title">Demo / Prototype thresholds</div><div class="hero-meta-value">Configurable by design.</div><div class="hero-meta-copy">These thresholds are placeholders for prototype validation and must be replaced with region- and crop-specific agronomic ranges for production.</div></div></div></div>', unsafe_allow_html=True)
     try:
@@ -751,6 +862,8 @@ def main() -> None:
         render_soil_report()
     elif page == "soil-image":
         render_soil_image()
+    elif page == "farmer-experience":
+        render_farmer_experience()
     elif page == "data-intelligence":
         render_data_intelligence()
     elif page == "nutrient-intelligence":

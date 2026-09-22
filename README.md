@@ -2,7 +2,7 @@
 
 ## Intelligent Soil Health Analysis & Fertilizer Recommendation System
 
-AGROSOIL AI is a premium Streamlit product experience for **DataXcelerate 2026, PS22**. Part 7 adds a preliminary visual soil-image assessment layer alongside the existing Part 3–6 analysis pipeline.
+AGROSOIL AI is a premium Streamlit product experience for **DataXcelerate 2026, PS22**. Part 8 adds a farmer-friendly observation workflow alongside the existing Part 3–7 analysis pipeline.
 
 ### Part 1 scope
 
@@ -98,6 +98,18 @@ PDF support extracts embedded text with `pypdf`. Image-only/scanned PDFs require
 
 Soil Image Mode uses Pillow and NumPy image characteristics only. Visual texture and moisture are approximate observations, not laboratory particle-size analysis or measured moisture percentages. Laboratory soil values are required for fertility prediction and should be supplied through Soil Report Mode or verified manual input.
 
+### Part 8 completed
+
+- Farmer Experience Mode with soil, moisture, crop history, visible-problem, water-retention, fertilizer-use, condition and notes inputs
+- Multi-select support for visible plant and soil problems
+- Reusable `modules/farmer_assessment.py` validation and transparent rule-based assessment
+- Field Observation Summary cards with the submitted observations
+- Observation patterns such as possible moisture, drainage, crop-performance, plant-stress and general-condition concerns
+- Practical follow-up guidance toward laboratory testing, Soil Report Mode, Soil Image Mode or verified manual values
+- Explicit boundary that farmer observations do not measure exact N, P, K, pH or Organic Carbon and do not feed the ML model
+
+Farmer Experience Mode is a preliminary observation workflow. It does not fabricate laboratory values, fertilizer dosages, chemical diagnoses or fertility predictions. Laboratory soil testing is recommended when exact nutrient interpretation is needed.
+
 ### Run locally
 
 ```bash
@@ -132,7 +144,8 @@ Then open the local URL shown by Streamlit, usually `http://localhost:8501`.
 │   ├── preprocessing.py
 │   ├── recommendation_engine.py
 │   ├── ocr.py
-│   └── soil_image.py
+│   ├── soil_image.py
+│   └── farmer_assessment.py
 │
 └── assets/
 ```
