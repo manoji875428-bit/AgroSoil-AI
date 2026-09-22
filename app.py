@@ -14,6 +14,7 @@ from modules.analytics import (
     npk_comparison_figure,
     nutrient_distribution_figure,
     nutrient_status_figure,
+    probability_comparison_figure,
     prediction_probability_figure,
     regional_summary_figure,
 )
@@ -39,6 +40,7 @@ from modules.ocr import process_soil_report, validate_extracted_values
 from modules.recommendation_engine import generate_recommendations
 from modules.preprocessing import run_preprocessing
 from modules.soil_image import generate_visual_assessment
+from modules.what_if import derive_input_ranges, run_what_if_simulation
 
 
 st.set_page_config(
@@ -207,6 +209,10 @@ def get_css() -> str:
     .concern-card { background: linear-gradient(145deg, rgba(65, 48, 32, .38), rgba(20, 29, 22, .72)); border: 1px solid rgba(224, 180, 94, .2); border-left: 3px solid var(--gold); border-radius: 12px; margin-bottom: .7rem; padding: 1rem 1.15rem; }
     .concern-title { color: var(--gold); font-weight: 700; }
     .concern-copy { color: var(--muted-strong); font-size: .82rem; line-height: 1.5; margin-top: .35rem; }
+    .simulation-card { background: linear-gradient(145deg, rgba(24, 40, 29, .8), rgba(14, 26, 19, .72)); border: 1px solid var(--line); border-radius: 16px; min-height: 155px; padding: 1.25rem; }
+    .simulation-label { color: var(--muted); font-size: .68rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+    .simulation-value { color: var(--lime); font-family: 'Manrope', sans-serif; font-size: 1.9rem; font-weight: 700; margin: .75rem 0 .35rem; }
+    .simulation-copy { color: var(--muted); font-size: .8rem; line-height: 1.5; }
     @keyframes rise { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
     @media (max-width: 900px) { .block-container { padding: 1.5rem 1.25rem 3rem; } .hero-grid { grid-template-columns: 1fr; } .hero-meta { border-left: 0; border-top: 1px solid var(--line); padding: 1.2rem 0 0; } .workflow { flex-wrap: wrap; } .workflow-card { flex: 1 1 30%; min-width: 130px; } .workflow-card::after { display: none; } }
     @media (max-width: 600px) { .hero-title { font-size: 3.1rem; } .section-head { align-items: start; flex-direction: column; gap: .4rem; } .workflow-card { flex-basis: 45%; } }
@@ -649,6 +655,89 @@ def render_farmer_experience() -> None:
     st.markdown('</div>', unsafe_allow_html=True)
 
 
+def render_what_if_simulator() -> None:
+    st.markdown('<div class="hero"><div class="hero-grid"><div><div class="eyebrow">◇ WHAT-IF SIMULATOR · PART 9</div><h1 class="hero-title">Explore the<br><span>possible shift.</span></h1><p class="hero-copy">Change validated soil parameters and compare how the trained AgroSoil AI prototype model responds before and after.</p></div><div class="hero-meta"><div class="hero-meta-title">Model-powered exploration</div><div class="hero-meta-value">Two real inferences.</div><div class="hero-meta-copy">Current and simulated profiles are both sent through the existing Random Forest model. No fertilizer quantities or field guarantees are produced.</div></div></div></div>', unsafe_allow_html=True)
+    st.info("Simulation uses the trained AgroSoil AI prototype model. Results are model predictions and should not be interpreted as laboratory measurements or guaranteed field outcomes.")
+    try:
+        processed_dataframe = pd.read_csv(default_processed_path())
+        input_ranges = derive_input_ranges(processed_dataframe)
+        model, metadata, model_error = load_model_artifacts()
+    except (OSError, ValueError, TypeError) as error:
+        st.error(f"The simulator is unavailable: {error}")
+        return
+    if model_error or model is None:
+        st.error(f"The trained model is unavailable: {model_error or 'No trained model was loaded.'}")
+        return
+
+    default_profile = {"N": 80.0, "P": 40.0, "K": 60.0, "pH": 6.5, "Organic_Carbon": 0.8}
+
+    def bounded_default(feature: str, value: float) -> float:
+        lower, upper = input_ranges[feature]
+        return min(max(value, lower), upper)
+
+    st.markdown('<div class="section">', unsafe_allow_html=True)
+    render_section_header("Current soil profile", "Start with known values", "Use laboratory or verified manual values. Image and farmer observations are not converted into chemical inputs.")
+    with st.form("what-if-simulation-form"):
+        current_values: dict[str, float] = {}
+        simulated_values: dict[str, float] = {}
+        form_columns = st.columns(2)
+        with form_columns[0]:
+            st.markdown('<div class="section-label">CURRENT VALUE</div>', unsafe_allow_html=True)
+            for feature, label, step in [("N", "Nitrogen (N)", 1.0), ("P", "Phosphorus (P)", 1.0), ("K", "Potassium (K)", 1.0), ("pH", "pH", 0.1), ("Organic_Carbon", "Organic Carbon", 0.1)]:
+                lower, upper = input_ranges[feature]
+                current_values[feature] = st.number_input(label, min_value=float(lower), max_value=float(upper), value=bounded_default(feature, default_profile[feature]), step=step, key=f"what-if-current-{feature}")
+        with form_columns[1]:
+            st.markdown('<div class="section-label">SIMULATED VALUE</div>', unsafe_allow_html=True)
+            for feature, label, step in [("N", "Nitrogen (N)", 1.0), ("P", "Phosphorus (P)", 1.0), ("K", "Potassium (K)", 1.0), ("pH", "pH", 0.1), ("Organic_Carbon", "Organic Carbon", 0.1)]:
+                lower, upper = input_ranges[feature]
+                simulated_values[feature] = st.number_input(label, min_value=float(lower), max_value=float(upper), value=bounded_default(feature, default_profile[feature]), step=step, key=f"what-if-simulated-{feature}")
+        run_simulation = st.form_submit_button("Run What-If Simulation  →", use_container_width=True)
+    st.markdown('</div>', unsafe_allow_html=True)
+    st.caption("Input ranges are derived from the processed prototype dataset where available; they are not universal agronomic limits.")
+
+    if not run_simulation:
+        return
+    try:
+        simulation = run_what_if_simulation(model, current_values, simulated_values, input_ranges)
+    except (ValueError, TypeError, KeyError, OSError) as error:
+        st.error(f"The simulation could not be run: {error}")
+        return
+
+    current = simulation["current"]
+    simulated = simulation["simulated"]
+    st.markdown('<div class="section">', unsafe_allow_html=True)
+    render_section_header("Before vs after", "See the model response", "Both profiles were evaluated by the same trained model artifact.")
+    result_columns = st.columns(2)
+    for column, label, result in [(result_columns[0], "CURRENT SOIL", current), (result_columns[1], "SIMULATED SOIL", simulated)]:
+        with column:
+            st.markdown(f'<div class="simulation-card"><div class="simulation-label">{label}</div><div class="simulation-value">{result["prediction"].upper()}</div><div class="simulation-copy">Model confidence: <strong>{result["confidence"]:.1%}</strong><br>Actual model probability for the predicted class.</div></div>', unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    st.markdown('<div class="section">', unsafe_allow_html=True)
+    render_section_header("Probability comparison", "Current vs simulated", "Every probability comes directly from the trained model's `predict_proba()` output.")
+    st.plotly_chart(probability_comparison_figure(current["probabilities"], simulated["probabilities"]), use_container_width=True, config={"displayModeBar": False})
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    st.markdown('<div class="section">', unsafe_allow_html=True)
+    render_section_header("Parameter changes", "What changed in the profile", "Differences are shown numerically; they are not fertilizer prescriptions.")
+    parameter_labels = {"N": "Nitrogen", "P": "Phosphorus", "K": "Potassium", "pH": "pH", "Organic_Carbon": "Organic Carbon"}
+    comparison_rows = []
+    for feature in ["N", "P", "K", "pH", "Organic_Carbon"]:
+        current_value = current["profile"][feature]
+        simulated_value = simulated["profile"][feature]
+        comparison_rows.append({"Parameter": parameter_labels[feature], "Current": current_value, "Simulated": simulated_value, "Change": round(simulated_value - current_value, 2)})
+    st.dataframe(pd.DataFrame(comparison_rows), use_container_width=True, hide_index=True)
+    comparison = simulation["comparison"]
+    change_message = "The predicted class changed." if comparison["prediction_changed"] else "The predicted class stayed the same; probability confidence may still have shifted."
+    st.markdown(f'<div class="about-panel"><div class="section-label">Simulation readout</div><div class="placeholder-copy">{change_message}</div></div>', unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    st.markdown('<div class="section">', unsafe_allow_html=True)
+    render_section_header("Model transparency", "A prototype exploration, not a laboratory test", "The model was trained on demo/synthetic data and does not establish production-grade agricultural accuracy or guaranteed field outcomes.")
+    st.markdown('<div class="about-panel"><div class="placeholder-copy">This simulator changes only model inputs and observes the existing classifier response. It does not calculate fertilizer dosage, claim crop improvement, or convert soil images and farmer observations into chemical values.</div></div>', unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
+
+
 def render_nutrient_intelligence() -> None:
     st.markdown('<div class="hero"><div class="hero-grid"><div><div class="eyebrow">◫ NUTRIENT INTELLIGENCE · PART 4</div><h1 class="hero-title">Read what is<br><span>in the soil.</span></h1><p class="hero-copy">Transparent, configurable nutrient analysis for nitrogen, phosphorus, potassium, pH and organic carbon. Every status is rule-based and explainable.</p></div><div class="hero-meta"><div class="hero-meta-title">Demo / Prototype thresholds</div><div class="hero-meta-value">Configurable by design.</div><div class="hero-meta-copy">These thresholds are placeholders for prototype validation and must be replaced with region- and crop-specific agronomic ranges for production.</div></div></div></div>', unsafe_allow_html=True)
     try:
@@ -864,6 +953,8 @@ def main() -> None:
         render_soil_image()
     elif page == "farmer-experience":
         render_farmer_experience()
+    elif page == "simulator":
+        render_what_if_simulator()
     elif page == "data-intelligence":
         render_data_intelligence()
     elif page == "nutrient-intelligence":

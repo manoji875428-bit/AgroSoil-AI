@@ -2,7 +2,7 @@
 
 ## Intelligent Soil Health Analysis & Fertilizer Recommendation System
 
-AGROSOIL AI is a premium Streamlit product experience for **DataXcelerate 2026, PS22**. Part 8 adds a farmer-friendly observation workflow alongside the existing Part 3–7 analysis pipeline.
+AGROSOIL AI is a premium Streamlit product experience for **DataXcelerate 2026, PS22**. Part 9 adds a genuine before-and-after What-If simulation layer around the existing trained classifier.
 
 ### Part 1 scope
 
@@ -110,6 +110,19 @@ Soil Image Mode uses Pillow and NumPy image characteristics only. Visual texture
 
 Farmer Experience Mode is a preliminary observation workflow. It does not fabricate laboratory values, fertilizer dosages, chemical diagnoses or fertility predictions. Laboratory soil testing is recommended when exact nutrient interpretation is needed.
 
+### Part 9 completed
+
+- What-If Soil Simulator with current and simulated N, P, K, pH and Organic Carbon profiles
+- Dataset-derived prototype input ranges with transparent fallback behavior
+- Reusable `modules/what_if.py` validation and simulation helpers
+- Two genuine inference passes through the existing Random Forest model
+- Before/after fertility class and model-confidence cards
+- Current-versus-simulated probability comparison chart from `predict_proba()`
+- Parameter comparison table with numeric changes
+- Validation for missing, non-numeric, non-finite, negative and invalid-pH inputs
+
+The simulator changes model inputs only. It does not calculate fertilizer dosage, convert image or farmer observations into chemical values, claim guaranteed crop outcomes, or act as a laboratory test. The underlying model is trained on demo/synthetic data for prototype validation.
+
 ### Run locally
 
 ```bash
@@ -145,7 +158,8 @@ Then open the local URL shown by Streamlit, usually `http://localhost:8501`.
 │   ├── recommendation_engine.py
 │   ├── ocr.py
 │   ├── soil_image.py
-│   └── farmer_assessment.py
+│   ├── farmer_assessment.py
+│   └── what_if.py
 │
 └── assets/
 ```

@@ -124,6 +124,31 @@ def prediction_probability_figure(probabilities: dict[str, float]) -> go.Figure:
     return _figure_layout(figure)
 
 
+def probability_comparison_figure(current: dict[str, float], simulated: dict[str, float]) -> go.Figure:
+    probability_frame = pd.DataFrame(
+        [
+            {"Class": label, "Probability": value, "Profile": "Current soil"}
+            for label, value in current.items()
+        ]
+        + [
+            {"Class": label, "Probability": value, "Profile": "Simulated soil"}
+            for label, value in simulated.items()
+        ]
+    )
+    figure = px.bar(
+        probability_frame,
+        x="Class",
+        y="Probability",
+        color="Profile",
+        barmode="group",
+        title="Current vs simulated class probabilities",
+        color_discrete_map={"Current soil": "#6f8f73", "Simulated soil": "#b7ee65"},
+    )
+    figure.update_yaxes(range=[0, 1], tickformat=".0%")
+    figure.update_traces(hovertemplate="%{x}: %{y:.1%}<extra>%{fullData.name}</extra>")
+    return _figure_layout(figure)
+
+
 def npk_comparison_figure(values: dict[str, float]) -> go.Figure:
     nutrient_frame = pd.DataFrame({"Nutrient": ["N", "P", "K"], "Value": [values["N"], values["P"], values["K"]]})
     figure = px.bar(
